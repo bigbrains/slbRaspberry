@@ -1,0 +1,3 @@
+adafruit-blinka
+adafruit-circuitpython-st7789
+Pillow
