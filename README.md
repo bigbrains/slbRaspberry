@@ -46,3 +46,6 @@ slb/
 ├── requirements.txt
 └── README.md
 ```
+
+python3 -m venv .venv
+source .venv/bin/activate

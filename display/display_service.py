@@ -2,7 +2,7 @@ import board
 import busio
 import digitalio
 from PIL import Image, ImageDraw, ImageFont
-import adafruit_st7789
+from adafruit_rgb_display import st7789
 
 
 class DisplayService:
@@ -15,13 +15,14 @@ class DisplayService:
         dc = digitalio.DigitalInOut(board.D24)
         reset = digitalio.DigitalInOut(board.D25)
 
-        self.display = adafruit_st7789.ST7789(
+        self.display = st7789.ST7789(
             spi,
             cs=cs,
             dc=dc,
             rst=reset,
             width=self.WIDTH,
             height=self.HEIGHT,
+            y_offset=80,
             rotation=0,
         )
 
