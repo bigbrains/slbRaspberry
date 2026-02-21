@@ -1,0 +1,14 @@
+[Unit]
+Description=SLB Menu Display
+After=sysinit.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/pi/slb
+ExecStart=/home/pi/slb/.venv/bin/python /home/pi/slb/menu_show.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
