@@ -22,6 +22,7 @@ class DisplayService:
             rst=reset,
             width=self.WIDTH,
             height=self.HEIGHT,
+            y_offset=80,
             rotation=0,
         )
 
