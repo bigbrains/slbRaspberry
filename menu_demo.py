@@ -86,7 +86,7 @@ def getch() -> str:
 
 def main():
     driver = ST7789Driver()
-    menu   = Menu(MENU_ITEMS, title="SETTINGS")
+    menu   = Menu(MENU_ITEMS, title="SLB")
     menu.render(driver)
 
     print("w/↑  up    s/↓  down    Enter  select    q  quit")

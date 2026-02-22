@@ -42,7 +42,7 @@ def main():
     driver = ST7789Driver()
     log.info("Display driver ready")
 
-    menu = Menu(MENU_ITEMS, title="SETTINGS")
+    menu = Menu(MENU_ITEMS, title="SLB")
     log.info("Menu created with %d items, %d visible at once",
              len(MENU_ITEMS), menu.visible)
 
