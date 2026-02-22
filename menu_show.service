@@ -6,7 +6,7 @@ After=sysinit.target
 Type=simple
 User=root
 WorkingDirectory=/home/pi/slb
-ExecStart=/home/pi/slb/.venv/bin/python /home/pi/slb/menu_show.py
+ExecStart=/home/pi/slb/.venv/bin/python /home/pi/slb/menu_buttons.py
 Restart=on-failure
 RestartSec=5
 

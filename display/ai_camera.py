@@ -51,6 +51,11 @@ class AICamera:
             self._show_error(driver, str(e))
             return None
 
+    def capture(self) -> tuple[Image.Image, str]:
+        """Capture, save, and return (fitted_240x240_image, path). Raises CameraError."""
+        img, path = self._capture()
+        return self._fit(img), path
+
     def is_available(self) -> bool:
         return os.path.exists(self.device)
 

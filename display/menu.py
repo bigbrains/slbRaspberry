@@ -157,22 +157,26 @@ class Menu:
     # ── Navigation ───────────────────────────────────────────────────────────
 
     def up(self) -> bool:
-        """Move selection one item up. Returns True if position changed."""
+        """Move selection one item up, wrapping to last item at the top."""
         if self.selected > 0:
             self.selected -= 1
             if self.selected < self.offset:
                 self.offset -= 1
-            return True
-        return False
+        else:
+            self.selected = len(self._keys) - 1
+            self.offset = max(0, self.selected - self.visible + 1)
+        return True
 
     def down(self) -> bool:
-        """Move selection one item down. Returns True if position changed."""
+        """Move selection one item down, wrapping to first item at the bottom."""
         if self.selected < len(self._keys) - 1:
             self.selected += 1
             if self.selected >= self.offset + self.visible:
                 self.offset += 1
-            return True
-        return False
+        else:
+            self.selected = 0
+            self.offset = 0
+        return True
 
     def select(self) -> tuple[str, type]:
         """Return (label, class) for the currently highlighted item."""

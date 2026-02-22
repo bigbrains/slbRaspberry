@@ -4,7 +4,8 @@ Navigate the menu using physical GPIO buttons.
 
   UP    (GPIO17, Pin 11) → move selection up
   DOWN  (GPIO27, Pin 13) → move selection down
-  A     (GPIO5,  Pin 29) → move selection down  (same as DOWN)
+  LEFT  (GPIO22, Pin 15) → back to menu (inside a mode)
+  A     (GPIO5,  Pin 29) → move selection down (same as DOWN)
   B     (GPIO6,  Pin 31) → confirm / select item
 
 Each button wired between its GPIO pin and GND (internal pull-up used).
@@ -25,25 +26,31 @@ from display.menu import ST7789Driver, Menu
 # ── Button pins ───────────────────────────────────────────────────────────────
 PIN_UP   = 17
 PIN_DOWN = 27
+PIN_LEFT = 22   # back (inside a mode)
 PIN_A    = 5    # acts as DOWN
 PIN_B    = 6    # select / confirm
 
-DEBOUNCE_MS = 200   # ignore repeated presses within this window
+DEBOUNCE_MS = 200
 
-# ── Setup ─────────────────────────────────────────────────────────────────────
+ALL_PINS = (PIN_UP, PIN_DOWN, PIN_LEFT, PIN_A, PIN_B)
+
+# ── GPIO setup ────────────────────────────────────────────────────────────────
 GPIO.setmode(GPIO.BCM)
 GPIO.setwarnings(False)
-# Clean up button pins first to clear any stale kernel interrupt state
-for pin in (PIN_UP, PIN_DOWN, PIN_A, PIN_B):
+for pin in ALL_PINS:
     try:
         GPIO.cleanup(pin)
     except Exception:
         pass
-for pin in (PIN_UP, PIN_DOWN, PIN_A, PIN_B):
+for pin in ALL_PINS:
     GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
+# ── Display + menu ────────────────────────────────────────────────────────────
 driver = ST7789Driver()
 menu   = Menu(MENU_ITEMS, title="SLB")
+
+# Pre-instantiate modes so in-session state is preserved between visits
+_modes = {label: cls() for label, cls in MENU_ITEMS.items()}
 
 def _shutdown(sig, frame):
     GPIO.cleanup()
@@ -54,36 +61,36 @@ signal.signal(signal.SIGTERM, _shutdown)
 signal.signal(signal.SIGINT,  _shutdown)
 
 menu.render(driver)
-log.info("Menu ready — use UP/DOWN/A to navigate, B to select")
+log.info("Menu ready — UP/DOWN/A navigate, B select, LEFT back")
 
 # ── Polling loop ──────────────────────────────────────────────────────────────
-# Track previous pin states to detect falling edges (HIGH→LOW = pressed).
-# Debounce by ignoring a pin for DEBOUNCE_MS after it fires.
-
-prev   = {pin: GPIO.HIGH for pin in (PIN_UP, PIN_DOWN, PIN_A, PIN_B)}
-last_t = {pin: 0.0       for pin in (PIN_UP, PIN_DOWN, PIN_A, PIN_B)}
+prev   = {pin: GPIO.HIGH for pin in ALL_PINS}
+last_t = {pin: 0.0       for pin in ALL_PINS}
 
 try:
     while True:
         now = time.monotonic()
-        for pin in (PIN_UP, PIN_DOWN, PIN_A, PIN_B):
+        for pin in ALL_PINS:
             state = GPIO.input(pin)
             if prev[pin] == GPIO.HIGH and state == GPIO.LOW:
                 if now - last_t[pin] >= DEBOUNCE_MS / 1000:
                     last_t[pin] = now
                     if pin == PIN_UP:
-                        if menu.up():
-                            menu.render(driver)
-                            log.info("UP   → %s", menu.select()[0])
+                        menu.up()
+                        menu.render(driver)
+                        log.info("UP   → %s", menu.select()[0])
                     elif pin in (PIN_DOWN, PIN_A):
-                        if menu.down():
-                            menu.render(driver)
-                            log.info("DOWN → %s", menu.select()[0])
+                        menu.down()
+                        menu.render(driver)
+                        log.info("DOWN → %s", menu.select()[0])
                     elif pin == PIN_B:
-                        label, cls = menu.select()
-                        log.info("SELECT → %s (%s)", label, cls.__name__)
+                        label, _ = menu.select()
+                        log.info("SELECT → %s", label)
+                        _modes[label].run(driver)   # state preserved across calls
+                        menu.render(driver)
+                        log.info("Returned to menu")
             prev[pin] = state
-        time.sleep(0.02)   # 50 Hz
+        time.sleep(0.02)
 finally:
     GPIO.cleanup()
     driver.close()

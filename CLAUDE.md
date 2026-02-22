@@ -30,6 +30,7 @@ Each button wired between its GPIO pin and GND. Internal pull-ups are used — *
 
 ## Running the menu display
 
+
 ### Python only (quickest way to test)
 ```bash
 ssh pi@raspberrypi.local
