@@ -128,13 +128,14 @@ class Menu:
     W        = 240
     H        = 240
     ITEM_H   = 20   # px per row
-    HEADER_H = 28   # px for title bar
+    HEADER_H = 42   # px for title bar (2 lines: title + network)
     SB_W     = 10   # scrollbar width
 
     C_BG       = (10,  10,  10)
     C_FG       = (210, 210, 210)
     C_HDR_BG   = (25,  80,  160)
     C_HDR_FG   = (255, 255, 255)
+    C_HDR_SUB  = (160, 200, 255)  # network subtitle colour
     C_SEL_BG   = (0,   150, 75)
     C_SEL_FG   = (255, 255, 255)
     C_DIVIDER  = (45,  45,  45)
@@ -147,9 +148,12 @@ class Menu:
         self.items    = items                      # preserves insertion order (Python 3.7+)
         self._keys    = list(items.keys())         # ordered label list for indexing
         self.title    = title
+        self.network  = ""                         # set externally; shown in header
         self.selected = 0
         self.offset   = 0
         self.visible  = (self.H - self.HEADER_H) // self.ITEM_H
+
+        self.pressed    = ""               # set externally; shown in header
 
         self._font_hdr  = _load_font(15)
         self._font_item = _load_font(13)
@@ -157,22 +161,26 @@ class Menu:
     # ── Navigation ───────────────────────────────────────────────────────────
 
     def up(self) -> bool:
-        """Move selection one item up. Returns True if position changed."""
+        """Move selection one item up, wrapping to last item at the top."""
         if self.selected > 0:
             self.selected -= 1
             if self.selected < self.offset:
                 self.offset -= 1
-            return True
-        return False
+        else:
+            self.selected = len(self._keys) - 1
+            self.offset = max(0, self.selected - self.visible + 1)
+        return True
 
     def down(self) -> bool:
-        """Move selection one item down. Returns True if position changed."""
+        """Move selection one item down, wrapping to first item at the bottom."""
         if self.selected < len(self._keys) - 1:
             self.selected += 1
             if self.selected >= self.offset + self.visible:
                 self.offset += 1
-            return True
-        return False
+        else:
+            self.selected = 0
+            self.offset = 0
+        return True
 
     def select(self) -> tuple[str, type]:
         """Return (label, class) for the currently highlighted item."""
@@ -195,10 +203,16 @@ class Menu:
 
     def _draw_header(self, d: ImageDraw.Draw):
         d.rectangle((0, 0, self.W - 1, self.HEADER_H - 1), fill=self.C_HDR_BG)
-        d.text((10, 7), self.title, font=self._font_hdr, fill=self.C_HDR_FG)
+        d.text((10, 4), self.title, font=self._font_hdr, fill=self.C_HDR_FG)
         counter = f"{self.selected + 1}/{len(self._keys)}"
-        d.text((self.W - self.SB_W - 46, 9), counter,
+        d.text((self.W - self.SB_W - 46, 6), counter,
                font=self._font_item, fill=self.C_HDR_FG)
+        net = self.network if self.network else "no network"
+        if self.pressed:
+            net_str = f"{net}  [{self.pressed}]"
+        else:
+            net_str = net
+        d.text((10, 26), net_str, font=self._font_item, fill=self.C_HDR_SUB)
 
     def _draw_items(self, d: ImageDraw.Draw):
         content_w = self.W - self.SB_W - 1

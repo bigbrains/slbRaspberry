@@ -1,0 +1,15 @@
+[Unit]
+Description=SLB AI Camera
+After=sysinit.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/pi/slb
+ExecStart=/home/pi/slb/.venv/bin/python /home/pi/slb/ai_camera_demo.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
