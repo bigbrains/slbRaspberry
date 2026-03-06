@@ -52,8 +52,8 @@ def _save_state(state: dict):
 _PIN_UP   = 17
 _PIN_DOWN = 6
 _PIN_LEFT = 22   # back to menu
-_PIN_A    = 5
-_PIN_B    = 27
+_PIN_A    = 26   # GPIO26, Pin 37
+_PIN_B    = 19   # GPIO19, Pin 35
 
 _DEBOUNCE   = 0.2
 _LONG_PRESS = 0.7
@@ -278,7 +278,7 @@ class ButtonTestMode:
     B long press → back to menu.
     """
 
-    _BUTTONS = {"UP": 17, "DOWN": 6, "LEFT": 22, "RIGHT": 23, "A": 5, "B": 27}
+    _BUTTONS = {"UP": 17, "DOWN": 6, "LEFT": 22, "RIGHT": 23, "A": 26, "B": 19}
 
     C_BG      = (10,  10,  10)
     C_HDR_BG  = (25,  80, 160)

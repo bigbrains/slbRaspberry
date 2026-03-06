@@ -38,8 +38,8 @@ ROLLBACK_SECONDS = 30
 _PIN_UP   = 17
 _PIN_DOWN = 6
 _PIN_LEFT = 22
-_PIN_A    = 5
-_PIN_B    = 27
+_PIN_A    = 26   # GPIO26, Pin 37
+_PIN_B    = 19   # GPIO19, Pin 35
 _ALL_PINS = (_PIN_UP, _PIN_DOWN, _PIN_LEFT, _PIN_A, _PIN_B)
 _DEBOUNCE   = 0.2
 _LONG_PRESS = 0.7
@@ -191,6 +191,7 @@ class NetworkMode:
 
         ok = _switch_network(conn_name)
         if not ok:
+            log.error("Switch to %s failed", conn_name)
             self._status    = "Connection failed"
             self._status_ok = False
             self._render(driver)
@@ -358,6 +359,7 @@ class IPInfoMode:
     # ── Test ─────────────────────────────────────────────────────────────────
 
     def _run_test(self, driver: ST7789Driver):
+        log.info("IPInfoMode: running connectivity test")
         self._lines = []
         self._show(driver, "Testing...")
 
@@ -371,18 +373,22 @@ class IPInfoMode:
 
         ext, ok = self._fetch("http://ifconfig.me/ip", max_bytes=64)
         if ok:
+            log.info("IPInfoMode: ext IP = %s", ext.strip())
             self._lines.append((f"Ext IP: {ext.strip()}", self.C_OK))
         else:
+            log.warning("IPInfoMode: ext IP unreachable: %s", ext)
             self._lines.append(("Ext IP: unreachable", self.C_FAIL))
         self._show(driver)
 
         body, ok = self._fetch("http://www.google.com", max_bytes=48)
         if ok:
+            log.info("IPInfoMode: google reachable")
             self._lines.append(("Google: OK", self.C_OK))
             snippet = body[:28].replace("\n", " ").strip()
             if snippet:
                 self._lines.append((f"  {snippet}", self.C_HINT))
         else:
+            log.warning("IPInfoMode: google unreachable: %s", body)
             self._lines.append(("Google: FAIL", self.C_FAIL))
 
         self._lines.append(("", self.C_HINT))

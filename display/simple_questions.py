@@ -1,5 +1,9 @@
+import logging
+
 from PIL import Image, ImageDraw
 from display.menu import _load_font, ST7789Driver
+
+log = logging.getLogger(__name__)
 
 
 class SimpleQuestions:
@@ -52,6 +56,8 @@ class SimpleQuestions:
         self._avail_lines    = (self.H - self.HEADER_H) // self.LINE_H
         self._pages = self._paginate()
         self.page   = 0
+        log.info("SimpleQuestions: %d pages, %d chars/line",
+                 len(self._pages), self._chars_per_line)
 
     # ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -106,13 +112,17 @@ class SimpleQuestions:
     def next_page(self) -> bool:
         if self.page < len(self._pages) - 1:
             self.page += 1
+            log.debug("next_page → %d/%d", self.page + 1, len(self._pages))
             return True
+        log.debug("next_page: already at last page")
         return False
 
     def prev_page(self) -> bool:
         if self.page > 0:
             self.page -= 1
+            log.debug("prev_page → %d/%d", self.page + 1, len(self._pages))
             return True
+        log.debug("prev_page: already at first page")
         return False
 
     # ── Rendering ─────────────────────────────────────────────────────────────

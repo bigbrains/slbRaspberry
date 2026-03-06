@@ -68,28 +68,39 @@ class AICamera:
 
     def fetch_scenarios(self, api_base: str) -> list[dict]:
         """GET /api/sessions → list of scenario dicts with at least {id, ...}."""
+        url = f"{api_base}/api/sessions/scenarios"
+        log.info("fetch_scenarios: GET %s", url)
         try:
             import requests
-            resp = requests.get(f"{api_base}/api/sessions/scenarios", timeout=10)
+            resp = requests.get(url, timeout=10)
             resp.raise_for_status()
-            return resp.json()
+            data = resp.json()
+            log.info("fetch_scenarios: got %d scenarios", len(data))
+            return data
         except Exception as e:
+            log.error("fetch_scenarios failed: %s", e)
             raise CameraError(f"fetch_scenarios: {e}")
 
     def submit_photo(self, api_base: str, scenario_id: int, photo_path: str) -> dict:
         """POST /api/solve with scenarioId and photos[]. Returns parsed JSON response."""
+        url = f"{api_base}/api/solve"
+        log.info("submit_photo: POST %s  scenario=%s  file=%s", url, scenario_id,
+                 os.path.basename(photo_path))
         try:
             import requests
             with open(photo_path, "rb") as f:
                 resp = requests.post(
-                    f"{api_base}/api/solve",
+                    url,
                     data={"scenarioId": scenario_id},
                     files={"photos[]": (os.path.basename(photo_path), f, "image/jpeg")},
                     timeout=30,
                 )
                 resp.raise_for_status()
-                return resp.json()
+                data = resp.json()
+                log.info("submit_photo: response %s", data)
+                return data
         except Exception as e:
+            log.error("submit_photo failed: %s", e)
             raise CameraError(f"submit_photo: {e}")
 
     # ── Scenario / camera screens ─────────────────────────────────────────────
@@ -152,6 +163,7 @@ class AICamera:
         ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
         path = os.path.join(self.photo_dir, f"photo_{ts}.jpg")
 
+        log.info("capture: device=%s path=%s", self.device, path)
         result = subprocess.run(
             ["fswebcam", "-d", self.device,
              "-r", "3264x2448", "--no-banner", "--quiet",
@@ -161,9 +173,12 @@ class AICamera:
             capture_output=True, timeout=30,
         )
         if result.returncode != 0:
-            raise CameraError(result.stderr.decode().strip() or "fswebcam failed")
+            err = result.stderr.decode().strip() or "fswebcam failed"
+            log.error("capture: fswebcam error: %s", err)
+            raise CameraError(err)
 
         if not os.path.exists(path):
+            log.error("capture: fswebcam returncode=0 but file missing: %s", path)
             raise CameraError("fswebcam ran but file was not created")
 
         img = Image.open(path)

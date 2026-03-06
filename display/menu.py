@@ -1,7 +1,10 @@
+import logging
 import time
 import spidev
 import RPi.GPIO as GPIO
 from PIL import Image, ImageDraw, ImageFont
+
+log = logging.getLogger(__name__)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -63,6 +66,7 @@ class ST7789Driver:
         self._spi.mode = 0
 
         self._init()
+        log.info("ST7789Driver ready (dc=%d, rst=%d, spi_hz=%d)", dc_pin, rst_pin, speed)
 
     def _cmd(self, c: int):
         GPIO.output(self._dc, 0)
@@ -96,6 +100,7 @@ class ST7789Driver:
         self._data(_pil_to_565(img))
 
     def close(self):
+        log.info("ST7789Driver closing")
         self._spi.close()
         GPIO.cleanup()
 

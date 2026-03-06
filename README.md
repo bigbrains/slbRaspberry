@@ -33,7 +33,7 @@ Each button is wired between its GPIO pin and GND. Internal pull-ups are used â€
 | Button   | Menu             | Inside a mode         |
 |----------|------------------|-----------------------|
 | A        | next item        | next / confirm        |
-| UP       | previous item    | previous              |
+| UP       | previous item    | presvious             |
 | DOWN     | next item        | next                  |
 | B short  | select / enter   | action / confirm      |
 | B long   | â€”                | back to previous menu |
