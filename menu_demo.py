@@ -55,8 +55,8 @@ _PIN_LEFT = 22   # back to menu
 _PIN_A    = 5
 _PIN_B    = 27
 
-_DEBOUNCE    = 0.2
-_LONG_PRESS  = 3.0
+_DEBOUNCE   = 0.2
+_LONG_PRESS = 0.7
 _ALL_PINS    = (_PIN_UP, _PIN_DOWN, _PIN_LEFT, _PIN_A, _PIN_B)
 
 
@@ -68,35 +68,19 @@ def _wait_release(pin):
 
 def _poll(prev: dict, last_t: dict, b_down_at: list) -> str | None:
     """
-    Poll A and B buttons only. Returns an event string or None:
-      'down', 'b_short', 'b_long'
-
-    B logic:
-      - press starts timer
-      - held >= LONG_PRESS (3s): fires 'b_long' immediately (no need to release)
-      - released before 3s: fires 'b_short' (select)
+    Poll A and B buttons. Returns 'down', 'b_short', 'b_long', or None.
+    B long press fires on release after _LONG_PRESS seconds.
     """
     now = time.monotonic()
-
-    # Check B long press while still held (fire immediately at 3s)
-    b_state = GPIO.input(_PIN_B)
-    if prev[_PIN_B] == GPIO.LOW and b_state == GPIO.LOW:
-        if b_down_at[0] > 0 and now - b_down_at[0] >= _LONG_PRESS:
-            b_down_at[0] = 0.0  # reset so release won't fire b_short
-            log.debug("B held 3s → b_long")
-            return 'b_long'
-
     for pin in (_PIN_A, _PIN_B):
         state = GPIO.input(pin)
         if pin == _PIN_B:
             if prev[pin] == GPIO.HIGH and state == GPIO.LOW:
-                b_down_at[0] = now                  # B just pressed
+                b_down_at[0] = now
             elif prev[pin] == GPIO.LOW and state == GPIO.HIGH:
-                if b_down_at[0] > 0:                # not already fired as long
-                    b_down_at[0] = 0.0
-                    prev[pin] = state
-                    log.debug("B released short → b_short")
-                    return 'b_short'
+                held = now - b_down_at[0]
+                prev[pin] = state
+                return 'b_long' if held >= _LONG_PRESS else 'b_short'
         elif pin == _PIN_A:
             if prev[pin] == GPIO.HIGH and state == GPIO.LOW:
                 if now - last_t[pin] >= _DEBOUNCE:
@@ -323,12 +307,10 @@ class ButtonTestMode:
             b_now = "B" in pressed
             b_was = "B" in last_pressed
             if b_now and not b_was:
-                b_down_at = now                          # B just pressed
-            elif b_now and b_was:
-                if b_down_at > 0 and now - b_down_at >= _LONG_PRESS:
-                    return                               # held 3s → back
+                b_down_at = now
             elif not b_now and b_was:
-                b_down_at = 0.0                          # released short → ignore (just display)
+                if now - b_down_at >= _LONG_PRESS:
+                    return
 
             if pressed != last_pressed:
                 self._render(driver, pressed)

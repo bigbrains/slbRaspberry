@@ -153,8 +153,6 @@ class Menu:
         self.offset   = 0
         self.visible  = (self.H - self.HEADER_H) // self.ITEM_H
 
-        self.pressed    = ""               # set externally; shown in header
-
         self._font_hdr  = _load_font(15)
         self._font_item = _load_font(13)
 
@@ -208,11 +206,7 @@ class Menu:
         d.text((self.W - self.SB_W - 46, 6), counter,
                font=self._font_item, fill=self.C_HDR_FG)
         net = self.network if self.network else "no network"
-        if self.pressed:
-            net_str = f"{net}  [{self.pressed}]"
-        else:
-            net_str = net
-        d.text((10, 26), net_str, font=self._font_item, fill=self.C_HDR_SUB)
+        d.text((10, 26), net, font=self._font_item, fill=self.C_HDR_SUB)
 
     def _draw_items(self, d: ImageDraw.Draw):
         content_w = self.W - self.SB_W - 1

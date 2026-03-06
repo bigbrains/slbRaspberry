@@ -42,7 +42,7 @@ _PIN_A    = 5
 _PIN_B    = 27
 _ALL_PINS = (_PIN_UP, _PIN_DOWN, _PIN_LEFT, _PIN_A, _PIN_B)
 _DEBOUNCE   = 0.2
-_LONG_PRESS = 3.0
+_LONG_PRESS = 0.7
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -144,22 +144,18 @@ class NetworkMode:
 
         while True:
             now = time.monotonic()
-
-            # B held 3s → back immediately
-            if prev[_PIN_B] == GPIO.LOW and GPIO.input(_PIN_B) == GPIO.LOW:
-                if b_down_at > 0 and now - b_down_at >= _LONG_PRESS:
-                    b_down_at = 0.0
-                    self._cancel_rollback()
-                    return
-
             for pin in (_PIN_A, _PIN_B):
                 state = GPIO.input(pin)
                 if pin == _PIN_B:
                     if prev[pin] == GPIO.HIGH and state == GPIO.LOW:
                         b_down_at = now
                     elif prev[pin] == GPIO.LOW and state == GPIO.HIGH:
-                        if b_down_at > 0:   # short press → connect
-                            b_down_at = 0.0
+                        held = now - b_down_at
+                        if held >= _LONG_PRESS:
+                            self._cancel_rollback()
+                            prev[pin] = state
+                            return
+                        else:
                             self._do_switch(driver)
                 elif pin == _PIN_A:
                     if prev[pin] == GPIO.HIGH and state == GPIO.LOW:
@@ -339,21 +335,17 @@ class IPInfoMode:
 
         while True:
             now = time.monotonic()
-
-            # B held 3s → back immediately
-            if prev[_PIN_B] == GPIO.LOW and GPIO.input(_PIN_B) == GPIO.LOW:
-                if b_down_at > 0 and now - b_down_at >= _LONG_PRESS:
-                    b_down_at = 0.0
-                    return
-
             for pin in (_PIN_A, _PIN_B):
                 state = GPIO.input(pin)
                 if pin == _PIN_B:
                     if prev[pin] == GPIO.HIGH and state == GPIO.LOW:
                         b_down_at = now
                     elif prev[pin] == GPIO.LOW and state == GPIO.HIGH:
-                        if b_down_at > 0:   # short press → retest
-                            b_down_at = 0.0
+                        held = now - b_down_at
+                        if held >= _LONG_PRESS:
+                            prev[pin] = state
+                            return
+                        else:
                             self._run_test(driver)
                 elif pin == _PIN_A:
                     if prev[pin] == GPIO.HIGH and state == GPIO.LOW:
