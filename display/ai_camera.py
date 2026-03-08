@@ -81,6 +81,22 @@ class AICamera:
             log.error("fetch_scenarios failed: %s", e)
             raise CameraError(f"fetch_scenarios: {e}")
 
+    def poll_data_check(self, api_base: str, session_id: int, version) -> tuple:
+        """GET /api/data/check?sessionId=X&version=Y
+        Returns (has_update, new_version, data). Raises CameraError on failure."""
+        url = f"{api_base}/api/data/check?sessionId={session_id}&version={version}"
+        log.debug("poll_data_check: GET %s", url)
+        try:
+            import requests
+            resp = requests.get(url, timeout=5)
+            resp.raise_for_status()
+            d = resp.json()
+            if d.get("hasUpdate"):
+                return True, d.get("version"), d.get("data")
+            return False, None, None
+        except Exception as e:
+            raise CameraError(f"poll: {e}")
+
     def submit_photo(self, api_base: str, scenario_id: int, photo_path: str) -> dict:
         """POST /api/solve with scenarioId and photos[]. Returns parsed JSON response."""
         url = f"{api_base}/api/solve"
@@ -148,6 +164,43 @@ class AICamera:
 
         driver.blit(img)
         time.sleep(duration)
+
+    def show_waiting(self, driver: ST7789Driver, dots: int = 0):
+        """Show 'Processing...' screen with animated dots."""
+        img = Image.new("RGB", (self.W, self.H), self.C_BG)
+        d   = ImageDraw.Draw(img)
+        d.rectangle((0, 0, self.W - 1, self.HEADER_H - 1), fill=self.C_HDR_BG)
+        d.text((6, 5), "AI Camera", font=self._font, fill=self.C_HDR_FG)
+        dot_str = "." * (dots % 4)
+        d.text((10, self.H // 2 - 20), f"Processing{dot_str}", font=self._font, fill=(200, 200, 80))
+        d.text((6, self.H - 18), "hold B: back", font=self._font_s, fill=(80, 80, 80))
+        driver.blit(img)
+
+    def show_data_result(self, driver: ST7789Driver, data):
+        """Show pipeline result data on screen."""
+        img = Image.new("RGB", (self.W, self.H), self.C_BG)
+        d   = ImageDraw.Draw(img)
+        d.rectangle((0, 0, self.W - 1, self.HEADER_H - 1), fill=(0, 110, 55))
+        d.text((6, 5), "Result", font=self._font, fill=self.C_HDR_FG)
+
+        if isinstance(data, dict):
+            lines = []
+            for k, v in data.items():
+                lines.extend(self._wrap(f"{k}: {v}", 32))
+        elif isinstance(data, str):
+            lines = self._wrap(data, 32)
+        else:
+            lines = self._wrap(str(data), 32)
+
+        y = self.HEADER_H + 6
+        for line in lines:
+            if y + 14 > self.H - 20:
+                break
+            d.text((6, y), line, font=self._font_s, fill=self.C_MSG_FG)
+            y += 15
+
+        d.text((6, self.H - 18), "B:new photo  hold:back", font=self._font_s, fill=(80, 80, 80))
+        driver.blit(img)
 
     def show_error_screen(self, driver: ST7789Driver, msg: str, duration: float = 3.0):
         """Show error screen for duration seconds."""

@@ -238,13 +238,18 @@ class AICameraMode:
             if event == 'b_long':
                 return False
             elif event == 'b_short':
-                self._capture_and_submit(driver, scenario, name)
+                session_id = self._capture_and_submit(driver, scenario, name)
+                if session_id is not None:
+                    take_new = self._run_polling(driver, session_id)
+                    if not take_new:
+                        return False
                 self._cam.show_camera_ready(driver, name)
             time.sleep(0.02)
 
     # ── Capture + submit ───────────────────────────────────────────────────────
 
-    def _capture_and_submit(self, driver, scenario: dict, name: str):
+    def _capture_and_submit(self, driver, scenario: dict, name: str) -> int | None:
+        """Capture photo and POST to API. Returns sessionId on success, None on failure."""
         self._cam._show_message(driver, "Capturing…")
         try:
             _, path = self._cam.capture()
@@ -252,7 +257,7 @@ class AICameraMode:
         except CameraError as e:
             log.error("Capture: %s", e)
             self._cam.show_error_screen(driver, str(e), duration=3)
-            return
+            return None
 
         self._cam._show_message(driver, "Submitting…")
         try:
@@ -261,9 +266,66 @@ class AICameraMode:
         except CameraError as e:
             log.error("Submit: %s", e)
             self._cam.show_error_screen(driver, str(e), duration=3)
-            return
+            return None
 
-        self._cam.show_response(driver, response, duration=5.0)
+        session_id = response.get("sessionId")
+        log.info("Session started: id=%s", session_id)
+        return session_id
+
+    # ── Result polling ─────────────────────────────────────────────────────────
+
+    def _run_polling(self, driver, session_id: int) -> bool:
+        """Poll /api/data/check every second until B is pressed.
+        Returns True to take a new photo, False to go back to scenario menu."""
+        version   = 0
+        dots      = 0
+        last_poll = 0.0
+        has_data  = False
+
+        self._cam.show_waiting(driver, dots)
+
+        prev      = {p: GPIO.HIGH for p in _ALL_PINS}
+        b_down_at = [0.0]
+
+        while True:
+            now = time.monotonic()
+
+            # Poll every second
+            if now - last_poll >= 1.0:
+                last_poll = now
+                try:
+                    updated, new_version, data = self._cam.poll_data_check(
+                        _API_BASE, session_id, version)
+                    if updated:
+                        version  = new_version
+                        has_data = True
+                        log.info("Data update v%s: %s", version, data)
+                        self._cam.show_data_result(driver, data)
+                    elif not has_data:
+                        dots += 1
+                        self._cam.show_waiting(driver, dots)
+                except CameraError as e:
+                    log.warning("Poll error: %s", e)
+                    if not has_data:
+                        dots += 1
+                        self._cam.show_waiting(driver, dots)
+
+            # Button handling
+            for pin in (_PIN_A, _PIN_B):
+                state = GPIO.input(pin)
+                if pin == _PIN_B:
+                    if prev[pin] == GPIO.HIGH and state == GPIO.LOW:
+                        b_down_at[0] = now
+                    elif prev[pin] == GPIO.LOW and state == GPIO.HIGH:
+                        held = now - b_down_at[0]
+                        prev[pin] = state
+                        if held >= _LONG_PRESS:
+                            return False   # back to scenario menu
+                        else:
+                            return True    # take new photo
+                prev[pin] = state
+
+            time.sleep(0.05)
 
     @staticmethod
     def _label(s: dict) -> str:
