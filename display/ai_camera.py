@@ -230,6 +230,28 @@ class AICamera:
         d.text((6, self.H - 18), "B:new photo  hold:back", font=self._font_s, fill=(80, 80, 80))
         driver.blit(img)
 
+    def show_no_network(self, driver: ST7789Driver):
+        """Show persistent 'no network' screen with button hints."""
+        img = Image.new("RGB", (self.W, self.H), self.C_BG)
+        d   = ImageDraw.Draw(img)
+        d.rectangle((0, 0, self.W - 1, self.HEADER_H - 1), fill=(120, 40, 0))
+        d.text((6, 5), "AI Camera", font=self._font, fill=self.C_HDR_FG)
+
+        y = self.HEADER_H + 22
+        d.text((6, y), "No Network", font=self._font, fill=(255, 120, 40))
+        y += 22
+        d.text((6, y), "Connect to WiFi", font=self._font_s, fill=(180, 180, 180))
+        y += 15
+        d.text((6, y), "and retry.",      font=self._font_s, fill=(180, 180, 180))
+
+        y = self.H - 52
+        d.line((6, y, self.W - 6, y), fill=(40, 40, 40))
+        y += 8
+        d.text((6, y),      "A      — retry",        font=self._font_s, fill=(100, 200, 100))
+        d.text((6, y + 15), "B      — back to menu", font=self._font_s, fill=(130, 130, 130))
+        d.text((6, y + 30), "hold B — restart app",  font=self._font_s, fill=(200, 150, 50))
+        driver.blit(img)
+
     def show_error_screen(self, driver: ST7789Driver, msg: str, duration: float = 3.0):
         """Show error screen for duration seconds."""
         self._show_error(driver, msg)

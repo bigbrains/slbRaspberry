@@ -16,6 +16,7 @@ AICameraMode:
 import json
 import logging
 import os
+import sys
 import time
 
 import RPi.GPIO as GPIO
@@ -186,14 +187,22 @@ class AICameraMode:
     # ── Scenario menu ──────────────────────────────────────────────────────────
 
     def _run_scenario_menu(self, driver) -> dict | None:
-        """Returns selected scenario dict, or None if LEFT pressed."""
-        self._cam._show_message(driver, "Loading scenarios…")
-        try:
-            scenarios = self._cam.fetch_scenarios(_API_BASE)
-        except CameraError as e:
-            log.error("fetch_scenarios: %s", e)
-            self._cam.show_error_screen(driver, str(e), duration=3)
-            return None
+        """Returns selected scenario dict, or None if user goes back."""
+        while True:
+            self._cam._show_message(driver, "Loading scenarios…")
+            try:
+                scenarios = self._cam.fetch_scenarios(_API_BASE)
+                break   # success → proceed to scenario menu
+            except CameraError as e:
+                log.error("fetch_scenarios: %s", e)
+                action = self._run_no_network(driver)
+                if action == "retry":
+                    continue
+                elif action == "restart":
+                    log.info("Restarting app on user request")
+                    os.execv(sys.executable, [sys.executable] + sys.argv)
+                else:
+                    return None  # back to main menu
 
         if not scenarios:
             self._cam.show_error_screen(driver, "No scenarios found", duration=3)
@@ -221,6 +230,27 @@ class AICameraMode:
                 log.info("Selected: %s (id=%s)",
                          self._label(scenario), scenario.get("id"))
                 return scenario
+            time.sleep(0.02)
+
+    # ── No-network screen ─────────────────────────────────────────────────────
+
+    def _run_no_network(self, driver) -> str:
+        """Show no-network screen and wait for user action.
+        Returns: 'retry', 'restart', or 'back'."""
+        self._cam.show_no_network(driver)
+
+        prev      = {p: GPIO.HIGH for p in _ALL_PINS}
+        last_t    = {p: 0.0       for p in _ALL_PINS}
+        b_down_at = [0.0]
+
+        while True:
+            event = _poll(prev, last_t, b_down_at)
+            if event == 'down':       # A button → retry
+                return "retry"
+            elif event == 'b_short':  # B short → back to main menu
+                return "back"
+            elif event == 'b_long':   # B hold → restart app
+                return "restart"
             time.sleep(0.02)
 
     # ── Camera ready loop ─────────────────────────────────────────────────────
