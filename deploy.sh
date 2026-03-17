@@ -5,6 +5,7 @@ PI_HOST="pi@raspberrypi.local"
 PI_PASS="Vladik95"
 LOCAL_DIR="/Users/vladislav/Documents/slbRaspberry/"
 REMOTE_DIR="~/slb/"
+SSH_OPTS="-o StrictHostKeyChecking=no -o PreferredAuthentications=password"
 
 # ── App lookup ─────────────────────────────────────────────────────────────────
 app_script() {
@@ -84,7 +85,7 @@ fi
 # ── Sync files ────────────────────────────────────────────────────────────────
 echo "Deploying to Raspberry Pi..."
 
-sshpass -p "$PI_PASS" rsync -av \
+sshpass -p "$PI_PASS" rsync -av -e "ssh $SSH_OPTS" \
   --exclude='.venv' \
   --exclude='.git' \
   --exclude='.idea' \
@@ -97,16 +98,16 @@ echo "Files synced."
 if [[ -n "$APP_KEY" ]]; then
   script="$(app_script "$APP_KEY")"
   echo "Stopping menu_show service..."
-  sshpass -p "$PI_PASS" ssh "$PI_HOST" "sudo systemctl stop menu_show" 2>/dev/null || true
+  sshpass -p "$PI_PASS" ssh $SSH_OPTS "$PI_HOST" "sudo systemctl stop menu_show" 2>/dev/null || true
   echo "Running $script (Ctrl+C to stop)..."
-  sshpass -p "$PI_PASS" ssh -t "$PI_HOST" "cd ~/slb && sudo .venv/bin/python $script"
+  ssh $SSH_OPTS -t "$PI_HOST" "cd ~/slb && sudo .venv/bin/python $script"
   echo ""
   echo "Starting menu_show service back..."
-  sshpass -p "$PI_PASS" ssh "$PI_HOST" "sudo systemctl start menu_show"
+  sshpass -p "$PI_PASS" ssh $SSH_OPTS "$PI_HOST" "sudo systemctl start menu_show"
   echo "Done."
 elif [[ "$NO_RESTART" == false ]]; then
   echo "Restarting menu_show..."
-  sshpass -p "$PI_PASS" ssh "$PI_HOST" "sudo systemctl restart menu_show"
+  sshpass -p "$PI_PASS" ssh $SSH_OPTS "$PI_HOST" "sudo systemctl restart menu_show"
   echo "Done. Service 'menu_show' restarted on the Pi."
 else
   echo "Done. (service not restarted)"

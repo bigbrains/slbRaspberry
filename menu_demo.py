@@ -235,22 +235,31 @@ class AICameraMode:
     # ── No-network screen ─────────────────────────────────────────────────────
 
     def _run_no_network(self, driver) -> str:
-        """Show no-network screen and wait for user action.
+        """Show no-network screen. Auto-retries every 3 s; also handles buttons.
         Returns: 'retry', 'restart', or 'back'."""
+        AUTO_RETRY_S = 3.0
+
         self._cam.show_no_network(driver)
 
-        prev      = {p: GPIO.HIGH for p in _ALL_PINS}
-        last_t    = {p: 0.0       for p in _ALL_PINS}
-        b_down_at = [0.0]
+        prev        = {p: GPIO.HIGH for p in _ALL_PINS}
+        last_t      = {p: 0.0       for p in _ALL_PINS}
+        b_down_at   = [0.0]
+        next_retry  = time.monotonic() + AUTO_RETRY_S
 
         while True:
+            now   = time.monotonic()
             event = _poll(prev, last_t, b_down_at)
-            if event == 'down':       # A button → retry
+            if event == 'down':       # A button → retry now
                 return "retry"
             elif event == 'b_short':  # B short → back to main menu
                 return "back"
             elif event == 'b_long':   # B hold → restart app
                 return "restart"
+
+            if now >= next_retry:
+                next_retry = now + AUTO_RETRY_S
+                return "retry"
+
             time.sleep(0.02)
 
     # ── Camera ready loop ─────────────────────────────────────────────────────
