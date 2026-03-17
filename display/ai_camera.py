@@ -183,21 +183,49 @@ class AICamera:
         d.rectangle((0, 0, self.W - 1, self.HEADER_H - 1), fill=(0, 110, 55))
         d.text((6, 5), "Result", font=self._font, fill=self.C_HDR_FG)
 
-        if isinstance(data, dict):
-            lines = []
-            for k, v in data.items():
-                lines.extend(self._wrap(f"{k}: {v}", 32))
-        elif isinstance(data, str):
-            lines = self._wrap(data, 32)
-        else:
-            lines = self._wrap(str(data), 32)
+        LINE_H   = 13   # px per text line
+        SEP_GAP  = 6    # px gap around separator line
+        FOOTER_H = 20
 
         y = self.HEADER_H + 6
-        for line in lines:
-            if y + 14 > self.H - 20:
-                break
-            d.text((6, y), line, font=self._font_s, fill=self.C_MSG_FG)
-            y += 15
+
+        if isinstance(data, dict):
+            items = [(k, v) for k, v in data.items() if v != 0]
+            for i, (k, v) in enumerate(items):
+                # question key
+                key_lines = self._wrap(str(k), 32)
+                for line in key_lines:
+                    if y + LINE_H > self.H - FOOTER_H:
+                        break
+                    d.text((6, y), line, font=self._font_s, fill=(150, 200, 255))
+                    y += LINE_H
+
+                # answer value — indented
+                val_lines = self._wrap(str(v), 30)
+                for line in val_lines:
+                    if y + LINE_H > self.H - FOOTER_H:
+                        break
+                    d.text((12, y), line, font=self._font_s, fill=self.C_MSG_FG)
+                    y += LINE_H
+
+                # separator line between items (not after the last one)
+                if i < len(items) - 1:
+                    y += SEP_GAP
+                    if y < self.H - FOOTER_H:
+                        d.line((6, y, self.W - 6, y), fill=(120, 120, 120))
+                    y += SEP_GAP + LINE_H  # 2 lines of space before next question
+        elif isinstance(data, str):
+            for line in self._wrap(data, 32):
+                if y + LINE_H > self.H - FOOTER_H:
+                    break
+                d.text((6, y), line, font=self._font_s, fill=self.C_MSG_FG)
+                y += LINE_H
+        else:
+            for line in self._wrap(str(data), 32):
+                if y + LINE_H > self.H - FOOTER_H:
+                    break
+                d.text((6, y), line, font=self._font_s, fill=self.C_MSG_FG)
+                y += LINE_H
 
         d.text((6, self.H - 18), "B:new photo  hold:back", font=self._font_s, fill=(80, 80, 80))
         driver.blit(img)

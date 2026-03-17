@@ -1,0 +1,14 @@
+[Unit]
+Description=SLB Boot Splash
+After=sysinit.target
+Before=menu_show.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/pi/slb
+ExecStart=/home/pi/slb/.venv/bin/python /home/pi/slb/boot_splash.py
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

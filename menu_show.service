@@ -1,11 +1,13 @@
 [Unit]
 Description=SLB Menu Display
-After=sysinit.target
+After=sysinit.target boot_splash.service
+Conflicts=boot_splash.service
 
 [Service]
 Type=simple
 User=root
 WorkingDirectory=/home/pi/slb
+ExecStartPre=/bin/systemctl stop boot_splash.service
 ExecStart=/home/pi/slb/.venv/bin/python /home/pi/slb/menu_buttons.py
 Restart=on-failure
 RestartSec=5

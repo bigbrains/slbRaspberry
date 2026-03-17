@@ -288,8 +288,10 @@ log.info("Menu ready — A:next  B:select  B-long:back")
 
 prev       = {pin: GPIO.HIGH for pin in ALL_PINS}
 last_t     = {pin: 0.0       for pin in ALL_PINS}
-last_net_t = 0.0
-NET_INTERVAL = 5.0
+last_net_t    = 0.0
+last_render_t = 0.0
+NET_INTERVAL     = 5.0
+REFRESH_INTERVAL = 4.0
 b_down_at   = time.monotonic()   # avoid false "held" reading on first release
 HOLD_GUARD  = 1.0                # ignore B if held longer than this
 
@@ -303,6 +305,12 @@ try:
             if new_net != menu.network:
                 menu.network = new_net
                 menu.render(driver)
+                last_render_t = now
+
+        if now - last_render_t >= REFRESH_INTERVAL:
+            last_render_t = now
+            driver.reinit()
+            menu.render(driver)
 
         for pin in ALL_PINS:
             state = GPIO.input(pin)

@@ -114,16 +114,34 @@ sudo .venv/bin/python buttons_demo.py  # shows which button is pressed on screen
 - `hello_fast.py`               — minimal low-level SPI test (no PIL)
 - `menu_show.service`           — systemd unit (installed at /etc/systemd/system/)
 
-## Sync local → Pi
+## Deploy to Pi
+
+Use `deploy.sh` (project root) to sync files and manage the Pi. Run `--help` for all options.
+
 ```bash
-rsync -av --exclude='.venv' --exclude='.git' --exclude='.idea' \
-  /Users/oksanka/slbRaspberry/ pi@raspberrypi.local:~/slb/
+./deploy.sh                  # sync + restart menu_show (default)
+./deploy.sh --no-restart     # sync only, don't touch the service
+./deploy.sh --help           # show all options
 ```
 
-## After syncing, reload the service
+**After making changes to a specific feature, deploy and test it directly:**
+
 ```bash
-ssh pi@raspberrypi.local "sudo systemctl restart menu_show"
+# AI Camera
+./deploy.sh --ai-camera      # sync + stop service + run ai_camera_demo.py live
+
+# Other apps
+./deploy.sh --menu-buttons   # run button-navigated menu
+./deploy.sh --questions      # run questions demo
+./deploy.sh --buttons-test   # run button wiring test
+./deploy.sh --ui-demo        # run UI demo
+./deploy.sh --diag           # run diagnostics
 ```
+
+App shortcuts stop `menu_show`, run the script interactively (output visible in terminal),
+then automatically restart `menu_show` when you Ctrl+C.
+
+Requires `sshpass`: `brew install hudochenkov/sshpass/sshpass`
 
 ## Menu API
 ```python

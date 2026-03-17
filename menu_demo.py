@@ -25,6 +25,7 @@ from display.menu import _load_font, Menu
 from display.simple_questions import SimpleQuestions
 from display.ai_camera import AICamera as _AICamera, CameraError
 from display.wifi_menu import NetworkMode, IPInfoMode
+from display.qa_result import QAResultView
 
 log = logging.getLogger(__name__)
 
@@ -275,17 +276,22 @@ class AICameraMode:
     # ── Result polling ─────────────────────────────────────────────────────────
 
     def _run_polling(self, driver, session_id: int) -> bool:
-        """Poll /api/data/check every second until B is pressed.
-        Returns True to take a new photo, False to go back to scenario menu."""
-        version   = 0
-        dots      = 0
-        last_poll = 0.0
-        has_data  = False
+        """Poll /api/data/check every second. Keep polling even after results arrive
+        so new updates are shown. User can take a new photo at any time.
+        A       → next page (wraps)
+        B short → take new photo immediately (returns True)
+        B long  → back to scenario menu (returns False)"""
+        version      = 0
+        dots         = 0
+        last_poll    = -999.0
+        qa_view: QAResultView | None = None
+        result_shown = False
 
         self._cam.show_waiting(driver, dots)
 
         prev      = {p: GPIO.HIGH for p in _ALL_PINS}
         b_down_at = [0.0]
+        last_a    = 0.0
 
         while True:
             now = time.monotonic()
@@ -297,16 +303,29 @@ class AICameraMode:
                     updated, new_version, data = self._cam.poll_data_check(
                         _API_BASE, session_id, version)
                     if updated:
-                        version  = new_version
-                        has_data = True
-                        log.info("Data update v%s: %s", version, data)
-                        self._cam.show_data_result(driver, data)
-                    elif not has_data:
+                        version = new_version
+                        log.info("Data update v%s", version)
+                        parsed = data
+                        if isinstance(parsed, str):
+                            try:
+                                import re as _re
+                                cleaned = _re.sub(r',\s*([}\]])', r'\1', parsed)
+                                parsed = json.loads(cleaned)
+                            except Exception:
+                                pass
+                        if isinstance(parsed, list):
+                            qa_view = QAResultView(parsed)
+                            qa_view.render(driver)
+                        else:
+                            qa_view = None
+                            self._cam.show_data_result(driver, parsed)
+                        result_shown = True
+                    elif not result_shown:
                         dots += 1
                         self._cam.show_waiting(driver, dots)
                 except CameraError as e:
                     log.warning("Poll error: %s", e)
-                    if not has_data:
+                    if not result_shown:
                         dots += 1
                         self._cam.show_waiting(driver, dots)
 
@@ -320,9 +339,16 @@ class AICameraMode:
                         held = now - b_down_at[0]
                         prev[pin] = state
                         if held >= _LONG_PRESS:
-                            return False   # back to scenario menu
+                            return False        # back to scenario menu
                         else:
-                            return True    # take new photo
+                            return True         # B short → take new photo now
+                elif pin == _PIN_A:
+                    if prev[pin] == GPIO.HIGH and state == GPIO.LOW:
+                        if now - last_a >= _DEBOUNCE and qa_view is not None:
+                            last_a = now
+                            if not qa_view.next_page():
+                                qa_view.page = 0   # wrap to first
+                            qa_view.render(driver)
                 prev[pin] = state
 
             time.sleep(0.05)

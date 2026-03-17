@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SLB Q&A</title>
+<style>
+  body {
+    background: #1a1a1a;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    margin: 0;
+    gap: 12px;
+    font-family: monospace;
+    color: #888;
+    font-size: 11px;
+  }
+  canvas { border: 2px solid #333; border-radius: 4px; display: block; }
+  .hint { text-align: center; }
+</style>
+</head>
+<body>
+<canvas id="s" width="240" height="240"></canvas>
+<div class="hint">↑ ↓ scroll &nbsp;|&nbsp; A/B buttons or arrow keys</div>
+
+<div style="display:flex;gap:12px;margin-top:4px">
+  <button onclick="move(-VISIBLE)" style="font-family:monospace;background:#222;color:#ccc;border:1px solid #444;padding:6px 16px;cursor:pointer;border-radius:3px">▲ UP</button>
+  <button onclick="move(VISIBLE)"  style="font-family:monospace;background:#222;color:#ccc;border:1px solid #444;padding:6px 16px;cursor:pointer;border-radius:3px">▼ DOWN</button>
+</div>
+
+<script>
+const QA = [
+  { q:"Capital of France?",              a:"Paris" },
+  { q:"Capital of Japan?",               a:"Tokyo" },
+  { q:"Capital of Australia?",           a:"Canberra" },
+  { q:"Capital of Brazil?",              a:"Brasília" },
+  { q:"Capital of Canada?",              a:"Ottawa" },
+  { q:"Largest ocean?",                  a:"Pacific" },
+  { q:"Longest river?",                  a:"Nile (~6650 km)" },
+  { q:"Highest mountain?",               a:"Everest (8849 m)" },
+  { q:"Largest country by area?",        a:"Russia" },
+  { q:"Smallest country?",               a:"Vatican City" },
+  { q:"How many continents?",            a:"7" },
+  { q:"How many planets?",               a:"8" },
+  { q:"Largest planet?",                 a:"Jupiter" },
+  { q:"Smallest planet?",                a:"Mercury" },
+  { q:"Closest star to Earth?",          a:"Proxima Centauri" },
+  { q:"Moon distance from Earth?",       a:"~384 400 km" },
+  { q:"Speed of light?",                 a:"~299 792 458 m/s" },
+  { q:"Speed of sound (air)?",           a:"~343 m/s" },
+  { q:"Boiling point of water?",         a:"100 °C / 212 °F" },
+  { q:"Freezing point of water?",        a:"0 °C / 32 °F" },
+  { q:"Gas plants absorb?",              a:"CO₂" },
+  { q:"Gas plants release?",             a:"O₂" },
+  { q:"Hardest natural substance?",      a:"Diamond" },
+  { q:"Chemical symbol for gold?",       a:"Au" },
+  { q:"Chemical symbol for iron?",       a:"Fe" },
+  { q:"Chemical symbol for water?",      a:"H₂O" },
+  { q:"Chemical symbol for salt?",       a:"NaCl" },
+  { q:"Bones in adult human body?",      a:"206" },
+  { q:"Chambers in the heart?",          a:"4" },
+  { q:"Normal human body temp?",         a:"37 °C / 98.6 °F" },
+  { q:"2 ^ 8?",                          a:"256" },
+  { q:"2 ^ 10?",                         a:"1 024" },
+  { q:"2 ^ 16?",                         a:"65 536" },
+  { q:"√144?",                           a:"12" },
+  { q:"√256?",                           a:"16" },
+  { q:"π ≈ ?",                           a:"3.14159…" },
+  { q:"e ≈ ?",                           a:"2.71828…" },
+  { q:"Angles in a triangle?",           a:"180°" },
+  { q:"Pythagorean theorem?",            a:"a²+b²=c²" },
+  { q:"0! (zero factorial)?",            a:"1" },
+  { q:"Prime number definition?",        a:"Divisible only by 1 & itself" },
+  { q:"Is 1 prime?",                     a:"No" },
+  { q:"First 5 primes?",                 a:"2,3,5,7,11" },
+  { q:"Binary of 255?",                  a:"11111111" },
+  { q:"Hex of 255?",                     a:"FF" },
+  { q:"1 byte = ? bits",                 a:"8 bits" },
+  { q:"1 KB (SI) = ? bytes",             a:"1 000 bytes" },
+  { q:"1 KiB = ? bytes",                 a:"1 024 bytes" },
+  { q:"Language in the browser?",        a:"JavaScript" },
+  { q:"HTTP stands for?",                a:"HyperText Transfer Protocol" },
+  { q:"HTTPS adds?",                     a:"TLS/SSL encryption" },
+  { q:"HTTP default port?",              a:"80" },
+  { q:"HTTPS default port?",             a:"443" },
+  { q:"SSH stands for?",                 a:"Secure Shell" },
+  { q:"API stands for?",                 a:"Application Program Interface" },
+  { q:"JSON stands for?",                a:"JS Object Notation" },
+  { q:"DNS stands for?",                 a:"Domain Name System" },
+  { q:"TCP vs UDP?",                     a:"TCP reliable; UDP fast" },
+  { q:"CPU stands for?",                 a:"Central Processing Unit" },
+  { q:"GPU stands for?",                 a:"Graphics Processing Unit" },
+  { q:"RAM stands for?",                 a:"Random Access Memory" },
+  { q:"OS stands for?",                  a:"Operating System" },
+  { q:"What is a kernel?",               a:"Core OS managing hardware" },
+  { q:"GPIO stands for?",                a:"General-Purpose I/O" },
+  { q:"SPI stands for?",                 a:"Serial Peripheral Interface" },
+  { q:"I2C stands for?",                 a:"Inter-Integrated Circuit" },
+  { q:"Pi Zero 2W GPIO voltage?",        a:"3.3 V" },
+  { q:"PWM stands for?",                 a:"Pulse-Width Modulation" },
+  { q:"Display resolution here?",        a:"240×240 px (ST7789)" },
+  { q:"MOSI stands for?",                a:"Master Out Slave In" },
+  { q:"Who wrote Romeo & Juliet?",       a:"Shakespeare (~1595)" },
+  { q:"WW2 ended?",                      a:"1945" },
+  { q:"General relativity by?",          a:"Einstein (1915)" },
+  { q:"Newton's 2nd law?",               a:"F = m·a" },
+  { q:"Ohm's law?",                      a:"V = I·R" },
+  { q:"Unit of resistance?",             a:"Ohm (Ω)" },
+  { q:"Unit of frequency?",              a:"Hertz (Hz)" },
+  { q:"LED stands for?",                 a:"Light-Emitting Diode" },
+  { q:"Moore's law?",                    a:"Transistors ×2 every ~2 yrs" },
+  { q:"What is pH 7?",                   a:"Neutral (pure water)" },
+  { q:"DNA stands for?",                 a:"Deoxyribonucleic Acid" },
+  { q:"How many DNA bases?",             a:"4: A T C G" },
+  { q:"Photosynthesis equation?",        a:"6CO₂+6H₂O→C₆H₁₂O₆+6O₂" },
+  { q:"Gravitational constant g?",       a:"~9.81 m/s²" },
+  { q:"Planck's constant h?",            a:"6.626×10⁻³⁴ J·s" },
+  { q:"Avogadro's number?",              a:"6.022×10²³ /mol" },
+  { q:"Absolute zero?",                  a:"−273.15 °C / 0 K" },
+  { q:"Number of colours in rainbow?",   a:"7 (ROYGBIV)" },
+  { q:"Layers of TCP/IP model?",         a:"4 (Link/Internet/Transport/App)" },
+  { q:"OSI model layers?",               a:"7" },
+  { q:"What is ASCII?",                  a:"7-bit char encoding (128 chars)" },
+  { q:"What is UTF-8?",                  a:"Variable-width Unicode encoding" },
+  { q:"Git init creates?",               a:".git directory" },
+  { q:"Linux file permission 777?",      a:"rwx for owner/group/others" },
+  { q:"sudo stands for?",                a:"Superuser Do" },
+];
+
+// ── Canvas setup ──────────────────────────────────────────────────────────────
+const cv  = document.getElementById("s");
+const ctx = cv.getContext("2d");
+const W = 240, H = 240;
+
+const FONT_SIZE = 8;
+const LINE_H    = 11;      // px per line
+const PAD       = 3;       // left padding
+const HEADER_H  = 14;
+const ITEM_H    = LINE_H * 2 + 3;  // q line + a line + gap
+
+// How many items fit on screen (below header)
+const VISIBLE = Math.floor((H - HEADER_H) / ITEM_H);
+
+let offset = 0;  // first visible item index
+
+function draw() {
+  // Background
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, W, H);
+
+  // Header
+  ctx.fillStyle = "#19509f";
+  ctx.fillRect(0, 0, W, HEADER_H);
+  ctx.fillStyle = "#fff";
+  ctx.font = `bold ${FONT_SIZE}px monospace`;
+  ctx.fillText(`SLB Q&A  [${offset+1}–${Math.min(offset+VISIBLE, QA.length)}/${QA.length}]`, PAD, HEADER_H - 3);
+
+  // Items
+  let y = HEADER_H + 1;
+  for (let i = offset; i < Math.min(offset + VISIBLE, QA.length); i++) {
+    const { q, a } = QA[i];
+
+    // Alternating row background
+    if ((i % 2) === 0) {
+      ctx.fillStyle = "#0a0a0a";
+      ctx.fillRect(0, y, W, ITEM_H);
+    }
+
+    // Index + question
+    ctx.font = `${FONT_SIZE}px monospace`;
+    ctx.fillStyle = "#4a90d9";
+    ctx.fillText(`${i+1}`.padStart(2," ") + ". " + q, PAD, y + FONT_SIZE);
+
+    // Answer
+    ctx.fillStyle = "#78c878";
+    ctx.fillText("    → " + a, PAD, y + FONT_SIZE + LINE_H);
+
+    y += ITEM_H;
+  }
+
+  // Scroll indicator bar (right edge)
+  const barH    = H - HEADER_H;
+  const thumbH  = Math.max(8, Math.round(barH * VISIBLE / QA.length));
+  const thumbY  = HEADER_H + Math.round((barH - thumbH) * offset / Math.max(1, QA.length - VISIBLE));
+  ctx.fillStyle = "#222";
+  ctx.fillRect(W - 3, HEADER_H, 3, barH);
+  ctx.fillStyle = "#19509f";
+  ctx.fillRect(W - 3, thumbY, 3, thumbH);
+}
+
+function move(dir) {
+  offset = Math.max(0, Math.min(QA.length - VISIBLE, offset + dir));
+  draw();
+}
+
+document.addEventListener("keydown", e => {
+  if (e.key === "ArrowDown"  || e.key === "s") move(1);
+  if (e.key === "ArrowUp"    || e.key === "w") move(-1);
+  if (e.key === "PageDown")                    move(VISIBLE);
+  if (e.key === "PageUp")                      move(-VISIBLE);
+});
+
+cv.addEventListener("wheel", e => { e.preventDefault(); move(e.deltaY > 0 ? 1 : -1); }, { passive: false });
+
+draw();
+</script>
+</body>
+</html>

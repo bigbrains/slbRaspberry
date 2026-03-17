@@ -94,6 +94,10 @@ class ST7789Driver:
         self._data(bytes([y0 >> 8, y0 & 0xFF, y1 >> 8, y1 & 0xFF]))
         self._cmd(0x2C)
 
+    def reinit(self):
+        """Re-run the full hardware init sequence (use after display power loss)."""
+        self._init()
+
     def blit(self, img: Image.Image):
         """Push a 240×240 PIL image to the display."""
         self._window(0, 0, self.W - 1, self.H - 1)
