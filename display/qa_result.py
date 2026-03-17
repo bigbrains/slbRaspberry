@@ -10,12 +10,14 @@ from display.menu import _load_font, ST7789Driver
 
 W, H = 240, 240
 
-C_BG  = (0,   0,   0)
-C_Q   = (255, 255, 255)    # question — white
-C_A   = (80,  220,  80)    # answer   — green
-C_NUM = (160, 160, 160)    # index number — grey
-C_SEP = (120, 120, 120)    # separator line
-C_PG  = (100, 100, 100)    # page counter
+C_BG     = (0,   0,   0)
+C_Q      = (255, 255, 255)   # question — white
+C_A      = (60,  230,  60)   # correct answer — bright green
+C_NUM    = (160, 160, 160)   # index number — grey
+C_SEP    = (80,  80,  80)    # separator between items
+C_SEP_QA = (45,  45,  45)    # separator between question and answers
+C_SEP_AA = (30,  30,  30)    # separator between individual answers
+C_PG     = (100, 100, 100)   # page counter
 
 
 class QAResultView:
@@ -72,7 +74,10 @@ class QAResultView:
 
     def _item_h(self, q: str, answers: list[str]) -> int:
         h = len(self._wrap(q, self._fq)) * self.LINE_Q
-        for a in answers:
+        h += 6   # separator between question and answers
+        for i, a in enumerate(answers):
+            if i > 0:
+                h += 5  # separator between answers
             h += len(self._wrap(a, self._fa)) * self.LINE_A
         h += self.SEP_H
         return h
@@ -144,8 +149,16 @@ class QAResultView:
                 d.text((tx, y), line, font=self._fq, fill=C_Q)
                 y += self.LINE_Q
 
-            # each answer on its own line
-            for a in answers:
+            # line between question and answers
+            y += 2
+            d.rectangle((tx, y, W - self.PAD, y), fill=C_SEP_QA)
+            y += 4
+
+            # each answer separated by a line
+            for i, a in enumerate(answers):
+                if i > 0:
+                    d.rectangle((tx + 4, y, W - self.PAD, y), fill=C_SEP_AA)
+                    y += 5
                 for line in self._wrap(a, self._fa):
                     d.text((tx, y), line, font=self._fa, fill=C_A)
                     y += self.LINE_A
