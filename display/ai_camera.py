@@ -267,6 +267,20 @@ class AICamera:
         path = os.path.join(self.photo_dir, f"photo_{ts}.jpg")
 
         log.info("capture: device=%s path=%s", self.device, path)
+
+        # Enable continuous autofocus if the camera supports it, then let it settle
+        af = subprocess.run(
+            ["v4l2-ctl", "-d", self.device, "--set-ctrl=focus_automatic_continuous=1"],
+            capture_output=True,
+        )
+        if af.returncode != 0:
+            # Older V4L2 control name
+            subprocess.run(
+                ["v4l2-ctl", "-d", self.device, "--set-ctrl=focus_auto=1"],
+                capture_output=True,
+            )
+        time.sleep(1.5)   # wait for autofocus to settle
+
         result = subprocess.run(
             ["fswebcam", "-d", self.device,
              "-r", "3264x2448", "--no-banner", "--quiet",
