@@ -12,12 +12,22 @@ W, H = 240, 240
 
 C_BG     = (0,   0,   0)
 C_Q      = (255, 255, 255)   # question — white
-C_A      = (60,  230,  60)   # correct answer — bright green
 C_NUM    = (160, 160, 160)   # index number — grey
 C_SEP    = (80,  80,  80)    # separator between items
 C_SEP_QA = (45,  45,  45)    # separator between question and answers
 C_SEP_AA = (30,  30,  30)    # separator between individual answers
 C_PG     = (100, 100, 100)   # page counter
+
+# Rotating palette for correct answers — each answer gets a distinct colour
+C_ANSWERS = [
+    (60,  230,  60),   # green
+    (80,  180, 255),   # blue
+    (255, 210,  50),   # yellow
+    (255, 100, 100),   # red
+    (180,  80, 255),   # purple
+    (50,  220, 200),   # cyan
+    (255, 150,  50),   # orange
+]
 
 
 class QAResultView:
@@ -154,13 +164,14 @@ class QAResultView:
             d.rectangle((tx, y, W - self.PAD, y), fill=C_SEP_QA)
             y += 4
 
-            # each answer separated by a line
+            # each answer separated by a line, each in its own colour
             for i, a in enumerate(answers):
                 if i > 0:
                     d.rectangle((tx + 4, y, W - self.PAD, y), fill=C_SEP_AA)
                     y += 5
+                color = C_ANSWERS[i % len(C_ANSWERS)]
                 for line in self._wrap(a, self._fa):
-                    d.text((tx, y), line, font=self._fa, fill=C_A)
+                    d.text((tx, y), line, font=self._fa, fill=color)
                     y += self.LINE_A
 
             y += 4
