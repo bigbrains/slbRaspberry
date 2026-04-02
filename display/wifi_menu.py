@@ -105,18 +105,20 @@ class NetworkMode:
     LEFT      — back to menu
     """
 
-    W, H   = 240, 240
-    HDR_H  = 28
-    ITEM_H = 30
-    C_HDR  = (25,  80, 160)
-    C_BG   = (10,  10,  10)
-    C_FG   = (210, 210, 210)
-    C_SEL  = (0,  150,  75)
-    C_FG_S = (255, 255, 255)
-    C_OK   = (80,  200,  80)
-    C_WARN = (220, 100,  60)
-    C_INFO = (200, 200,  80)
-    C_HINT = (100, 100, 100)
+    W, H        = 240, 240
+    HDR_H       = 28
+    ITEM_H      = 28
+    C_HDR       = (8,  28,  16)
+    C_HDR_ACC   = (28, 120,  60)
+    C_BG        = (4,   6,   8)
+    C_FG        = (145, 155, 145)
+    C_SEL_BG    = (8,  28,  18)
+    C_SEL_ACC   = (34, 197,  94)
+    C_FG_S      = (255, 255, 255)
+    C_OK        = (60,  195,  80)
+    C_WARN      = (215,  95,  50)
+    C_INFO      = (180, 195,  70)
+    C_HINT      = (52,  58,  52)
 
     def __init__(self):
         self._font   = _load_font(13)
@@ -253,49 +255,66 @@ class NetworkMode:
 
         # Header
         d.rectangle((0, 0, self.W - 1, self.HDR_H - 1), fill=self.C_HDR)
-        d.text((10, 7), "NETWORK", font=self._font, fill=self.C_FG_S)
+        d.line((0, self.HDR_H - 1, self.W - 1, self.HDR_H - 1), fill=self.C_HDR_ACC)
+        d.text((8, 8), "Network", font=self._font, fill=self.C_FG_S)
 
-        # Active connection label
+        # Active connection — inline in header, right side
         current = _current_connection() or "none"
-        d.text((10, self.HDR_H + 4),
-               f"Active: {current}", font=self._font_s, fill=self.C_INFO)
+        conn_short = current if len(current) <= 14 else current[:13] + "…"
+        try:
+            cw = int(self._font_s.getlength(conn_short))
+        except AttributeError:
+            cw = self._font_s.getbbox(conn_short)[2]
+        d.text((self.W - cw - 8, 10), conn_short, font=self._font_s, fill=self.C_INFO)
 
         # Network list
-        list_top = self.HDR_H + 22
+        list_top = self.HDR_H + 4
         for i, label in enumerate(self._labels):
             y      = list_top + i * self.ITEM_H
             is_sel = i == self._sel
-            d.rectangle((0, y, self.W - 1, y + self.ITEM_H - 2),
-                        fill=self.C_SEL if is_sel else self.C_BG)
-            prefix      = ">" if is_sel else " "
-            active_mark = " *" if NETWORKS[label] == current else ""
-            d.text((8, y + 8),
-                   f"{prefix} {label}{active_mark}",
+            is_active = NETWORKS[label] == current
+            if is_sel:
+                d.rectangle((0, y, self.W - 1, y + self.ITEM_H - 2), fill=self.C_SEL_BG)
+                d.rectangle((0, y, 2, y + self.ITEM_H - 2), fill=self.C_SEL_ACC)
+            # signal indicator (decorative, right-aligned)
+            sig = "▂▄▆█" if is_active else "▂▄▆░"
+            sig_color = self.C_OK if is_active else (45, 55, 45)
+            try:
+                sw = int(self._font_s.getlength(sig))
+            except AttributeError:
+                sw = self._font_s.getbbox(sig)[2]
+            d.text((self.W - sw - 8, y + 8), sig, font=self._font_s, fill=sig_color)
+            d.text((8, y + 8), label,
                    font=self._font_s,
                    fill=self.C_FG_S if is_sel else self.C_FG)
+            if not is_sel:
+                d.line((6, y + self.ITEM_H - 2, self.W - 6, y + self.ITEM_H - 2),
+                       fill=(16, 24, 16))
 
         # Rollback countdown
         if self._rb_thread and self._rb_thread.is_alive():
             remaining = max(0.0, self._rb_end - time.monotonic())
-            bar_y = self.H - 52
-            d.rectangle((0, bar_y, self.W - 1, self.H - 24), fill=(60, 25, 0))
-            d.text((8, bar_y + 3),
+            bar_y = self.H - 50
+            d.rectangle((0, bar_y, self.W - 1, self.H - 22), fill=(32, 14, 4))
+            d.rectangle((0, bar_y, self.W - 1, bar_y), fill=(90, 38, 8))
+            d.text((8, bar_y + 4),
                    f"Rollback in {remaining:.0f}s — B to keep",
                    font=self._font_s, fill=self.C_WARN)
-            bx, by, bw, bh = 6, bar_y + 18, self.W - 12, 5
-            d.rectangle((bx, by, bx + bw, by + bh), fill=(80, 40, 0))
+            bx, by, bw, bh = 8, bar_y + 20, self.W - 16, 4
+            d.rectangle((bx, by, bx + bw, by + bh), fill=(48, 24, 8))
             filled = int(bw * remaining / ROLLBACK_SECONDS)
             if filled > 0:
                 d.rectangle((bx, by, bx + filled, by + bh), fill=self.C_WARN)
 
-        # Status bar
-        status_y = self.H - 20
+        # Status bar / hints
+        status_y = self.H - 18
+        d.rectangle((0, status_y, self.W - 1, self.H - 1), fill=(4, 6, 4))
+        d.line((0, status_y, self.W - 1, status_y), fill=(14, 22, 14))
         if self._status:
             color = self.C_OK if self._status_ok else self.C_WARN
-            d.rectangle((0, status_y, self.W - 1, self.H - 1), fill=(20, 20, 20))
-            d.text((6, status_y + 4), self._status, font=self._font_s, fill=color)
+            d.text((8, status_y + 3), self._status, font=self._font_s, fill=color)
         else:
-            d.text((6, status_y + 4), "B:connect  ←:back",
+            d.text((8, status_y + 3), "B connect  ← back",
                    font=self._font_s, fill=self.C_HINT)
 
         driver.blit(img)
@@ -311,15 +330,17 @@ class IPInfoMode:
     LEFT    — back to menu
     """
 
-    W, H   = 240, 240
-    HDR_H  = 28
-    C_HDR  = (25,  80, 160)
-    C_BG   = (10,  10,  10)
-    C_FG   = (220, 220, 220)
-    C_OK   = (80,  200,  80)
-    C_FAIL = (220, 100,  60)
-    C_INFO = (200, 200,  80)
-    C_HINT = (100, 100, 100)
+    W, H     = 240, 240
+    HDR_H    = 28
+    C_HDR    = (10,  14,  32)
+    C_HDR_AC = (38,  60, 120)
+    C_BG     = (4,   6,  10)
+    C_FG     = (200, 205, 215)
+    C_KEY    = (55,  65,  90)
+    C_OK     = (65,  195,  80)
+    C_FAIL   = (215,  90,  55)
+    C_INFO   = (165, 175, 200)
+    C_HINT   = (45,  50,  68)
 
     def __init__(self):
         self._font   = _load_font(13)
@@ -421,14 +442,32 @@ class IPInfoMode:
         img = Image.new("RGB", (self.W, self.H), self.C_BG)
         d   = ImageDraw.Draw(img)
         d.rectangle((0, 0, self.W - 1, self.HDR_H - 1), fill=self.C_HDR)
-        d.text((10, 7), "IP / CONNECTIVITY", font=self._font_s, fill=(255, 255, 255))
+        d.line((0, self.HDR_H - 1, self.W - 1, self.HDR_H - 1), fill=self.C_HDR_AC)
+        d.text((8, 8), "IP / Network", font=self._font_s, fill=(200, 210, 240))
 
         if status:
-            d.text((10, self.HDR_H + 10), status, font=self._font, fill=self.C_INFO)
+            try:
+                sw = int(self._font.getlength(status))
+            except AttributeError:
+                sw = self._font.getbbox(status)[2]
+            d.text(((self.W - sw) // 2, self.H // 2 - 8),
+                   status, font=self._font, fill=self.C_INFO)
         else:
-            y = self.HDR_H + 6
+            y = self.HDR_H + 8
             for text, color in self._lines:
-                d.text((8, y), text, font=self._font_s, fill=color)
+                # Split "Key: value" into key/value for two-column style
+                if ": " in text and not text.startswith(" ") and not text.startswith("A/B"):
+                    key, _, val = text.partition(": ")
+                    key = key.strip()
+                    val = val.strip()
+                    try:
+                        kw = int(self._font_s.getlength(key + ":"))
+                    except AttributeError:
+                        kw = self._font_s.getbbox(key + ":")[2]
+                    d.text((8, y), key + ":", font=self._font_s, fill=self.C_KEY)
+                    d.text((56, y), val, font=self._font_s, fill=color)
+                else:
+                    d.text((8, y), text, font=self._font_s, fill=color)
                 y += 18
 
         driver.blit(img)

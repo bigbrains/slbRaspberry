@@ -15,16 +15,16 @@ class SimpleQuestions:
 
     W = 240
     H = 240
-    PAD       = 4
-    HEADER_H  = 24
+    PAD       = 6
+    HEADER_H  = 26
     LINE_H    = 15   # px per text line
 
-    C_BG      = (10,  10,  10)
-    C_HDR_BG  = (25,  80,  160)
+    C_BG      = (5,   8,  14)
+    C_HDR_BG  = (10,  18,  38)
     C_HDR_FG  = (255, 255, 255)
-    C_Q       = (100, 200, 255)   # question — light blue
-    C_A       = (140, 220, 140)   # answer   — light green
-    C_SEP     = (45,  45,  45)
+    C_Q       = (120, 180, 255)   # question — blue
+    C_A       = (110, 220, 145)   # answer   — green
+    C_SEP     = (22,  28,  40)
 
     QUESTIONS: dict[str, str] = {
         "What is Python?":
@@ -136,10 +136,17 @@ class SimpleQuestions:
 
         # Header
         d.rectangle((0, 0, self.W - 1, self.HEADER_H - 1), fill=self.C_HDR_BG)
-        d.text((self.PAD, 6), "Simple Questions", font=self._font_hdr, fill=self.C_HDR_FG)
+        d.line((0, self.HEADER_H - 1, self.W - 1, self.HEADER_H - 1), fill=(28, 45, 80))
+        d.text((self.PAD, 7), "Questions", font=self._font_hdr, fill=self.C_HDR_FG)
         if self._pages:
             pg = f"{self.page + 1}/{len(self._pages)}"
-            d.text((self.W - 34, 7), pg, font=self._font, fill=self.C_HDR_FG)
+            try:
+                pw = int(self._font.getlength(pg))
+            except AttributeError:
+                pw = self._font.getbbox(pg)[2]
+            px = self.W - pw - 10
+            d.rectangle((px - 4, 7, px + pw + 4, self.HEADER_H - 7), fill=(20, 30, 60))
+            d.text((px, 8), pg, font=self._font, fill=(95, 120, 185))
 
         if not self._pages:
             d.text((self.PAD, self.HEADER_H + 8), "No questions loaded.",

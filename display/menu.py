@@ -136,20 +136,24 @@ class Menu:
 
     W        = 240
     H        = 240
-    ITEM_H   = 20   # px per row
-    HEADER_H = 42   # px for title bar (2 lines: title + network)
-    SB_W     = 10   # scrollbar width
+    ITEM_H   = 22   # px per row
+    HEADER_H = 30   # px for title bar (2 lines: title + network)
+    FOOTER_H = 18   # px for hint bar at bottom
+    SB_W     = 3    # scrollbar width
 
-    C_BG       = (10,  10,  10)
-    C_FG       = (210, 210, 210)
-    C_HDR_BG   = (25,  80,  160)
-    C_HDR_FG   = (255, 255, 255)
-    C_HDR_SUB  = (160, 200, 255)  # network subtitle colour
-    C_SEL_BG   = (0,   150, 75)
-    C_SEL_FG   = (255, 255, 255)
-    C_DIVIDER  = (45,  45,  45)
-    C_SB_TRACK = (28,  28,  28)
-    C_SB_THUMB = (110, 110, 110)
+    C_BG         = (6,   6,  10)
+    C_FG         = (165, 170, 182)
+    C_HDR_BG     = (16,  18,  38)
+    C_HDR_FG     = (255, 255, 255)
+    C_HDR_SUB    = (70,  90, 130)
+    C_SEL_BG     = (10,  20,  48)
+    C_SEL_FG     = (255, 255, 255)
+    C_SEL_ACCENT = (59,  130, 246)
+    C_DIVIDER    = (20,  20,  28)
+    C_SB_TRACK   = (12,  12,  18)
+    C_SB_THUMB   = (48,  58,  82)
+    C_FOOTER_BG  = (6,   6,  10)
+    C_FOOTER_FG  = (40,  46,  60)
 
     def __init__(self, items: dict[str, type], title: str = "MENU"):
         if not items:
@@ -160,10 +164,10 @@ class Menu:
         self.network  = ""                         # set externally; shown in header
         self.selected = 0
         self.offset   = 0
-        self.visible  = (self.H - self.HEADER_H) // self.ITEM_H
+        self.visible  = (self.H - self.HEADER_H - self.FOOTER_H) // self.ITEM_H
 
-        self._font_hdr  = _load_font(15)
-        self._font_item = _load_font(13)
+        self._font_hdr  = _load_font(13)
+        self._font_item = _load_font(11)
 
     # ── Navigation ───────────────────────────────────────────────────────────
 
@@ -206,35 +210,49 @@ class Menu:
         self._draw_header(d)
         self._draw_items(d)
         self._draw_scrollbar(d)
+        self._draw_footer(d)
         return img
 
     def _draw_header(self, d: ImageDraw.Draw):
         d.rectangle((0, 0, self.W - 1, self.HEADER_H - 1), fill=self.C_HDR_BG)
-        d.text((10, 4), self.title, font=self._font_hdr, fill=self.C_HDR_FG)
-        counter = f"{self.selected + 1}/{len(self._keys)}"
-        d.text((self.W - self.SB_W - 46, 6), counter,
-               font=self._font_item, fill=self.C_HDR_FG)
+        d.line((0, self.HEADER_H - 1, self.W - 1, self.HEADER_H - 1), fill=(32, 42, 80))
+        # Title
+        d.text((8, 5), self.title, font=self._font_hdr, fill=self.C_HDR_FG)
+        # Network (small, muted, below title)
         net = self.network if self.network else "no network"
-        d.text((10, 26), net, font=self._font_item, fill=self.C_HDR_SUB)
+        if len(net) > 18:
+            net = net[:17] + "…"
+        d.text((8, 18), net, font=self._font_item, fill=self.C_HDR_SUB)
+        # Counter pill on right
+        counter = f"{self.selected + 1}/{len(self._keys)}"
+        try:
+            cw = int(self._font_item.getlength(counter))
+        except AttributeError:
+            cw = self._font_item.getbbox(counter)[2]
+        px = self.W - self.SB_W - cw - 12
+        d.rectangle((px - 4, 9, px + cw + 4, self.HEADER_H - 8), fill=(26, 32, 62))
+        d.text((px, 10), counter, font=self._font_item, fill=(100, 125, 190))
 
     def _draw_items(self, d: ImageDraw.Draw):
         content_w = self.W - self.SB_W - 1
+        body_top  = self.HEADER_H
+        body_bot  = self.H - self.FOOTER_H
         for i in range(self.visible):
             idx = self.offset + i
             if idx >= len(self._keys):
                 break
-            y      = self.HEADER_H + i * self.ITEM_H
+            y = body_top + i * self.ITEM_H
+            if y + self.ITEM_H > body_bot:
+                break
             is_sel = idx == self.selected
-            bg     = self.C_SEL_BG if is_sel else self.C_BG
-            fg     = self.C_SEL_FG if is_sel else self.C_FG
 
-            d.rectangle((0, y, content_w, y + self.ITEM_H - 1), fill=bg)
-            prefix = ">" if is_sel else " "
-            d.text((6, y + 4), f"{prefix} {self._keys[idx]}",
-                   font=self._font_item, fill=fg)
-
-            if not is_sel:
-                d.line((4, y + self.ITEM_H - 1, content_w - 4, y + self.ITEM_H - 1),
+            if is_sel:
+                d.rectangle((0, y, content_w, y + self.ITEM_H - 1), fill=self.C_SEL_BG)
+                d.rectangle((0, y, 2, y + self.ITEM_H - 1), fill=self.C_SEL_ACCENT)
+                d.text((8, y + 5), self._keys[idx], font=self._font_item, fill=self.C_SEL_FG)
+            else:
+                d.text((8, y + 5), self._keys[idx], font=self._font_item, fill=self.C_FG)
+                d.line((6, y + self.ITEM_H - 1, content_w - 4, y + self.ITEM_H - 1),
                        fill=self.C_DIVIDER)
 
     def _draw_scrollbar(self, d: ImageDraw.Draw):
@@ -242,11 +260,23 @@ class Menu:
             return
         sb_x      = self.W - self.SB_W
         track_top = self.HEADER_H
-        track_h   = self.H - track_top
-        d.rectangle((sb_x, track_top, self.W - 1, self.H - 1), fill=self.C_SB_TRACK)
+        track_bot = self.H - self.FOOTER_H
+        track_h   = track_bot - track_top
+        d.rectangle((sb_x, track_top, self.W - 1, track_bot - 1), fill=self.C_SB_TRACK)
 
-        thumb_h = max(14, track_h * self.visible // len(self._keys))
+        thumb_h = max(10, track_h * self.visible // len(self._keys))
         max_off = len(self._keys) - self.visible
         thumb_y = track_top + (track_h - thumb_h) * self.offset // max(1, max_off)
-        d.rectangle((sb_x + 2, thumb_y, self.W - 3, thumb_y + thumb_h),
+        d.rectangle((sb_x, thumb_y, self.W - 1, thumb_y + thumb_h),
                     fill=self.C_SB_THUMB)
+
+    def _draw_footer(self, d: ImageDraw.Draw):
+        fy = self.H - self.FOOTER_H
+        d.rectangle((0, fy, self.W - 1, self.H - 1), fill=self.C_FOOTER_BG)
+        d.line((0, fy, self.W - 1, fy), fill=(16, 20, 34))
+        hint = "UP/DN navigate  B select"
+        try:
+            hw = int(self._font_item.getlength(hint))
+        except AttributeError:
+            hw = self._font_item.getbbox(hint)[2]
+        d.text(((self.W - hw) // 2, fy + 4), hint, font=self._font_item, fill=self.C_FOOTER_FG)

@@ -8,25 +8,28 @@ Each answer is rendered on its own line in a distinct colour.
 from PIL import Image, ImageDraw
 from display.menu import _load_font, ST7789Driver
 
-W, H = 240, 240
+W, H     = 240, 240
+HDR_H    = 24
 
-C_BG     = (0,   0,   0)
-C_Q      = (255, 255, 255)   # question — white
-C_NUM    = (160, 160, 160)   # index number — grey
-C_SEP    = (80,  80,  80)    # separator between items
-C_SEP_QA = (45,  45,  45)    # separator between question and answers
-C_SEP_AA = (30,  30,  30)    # separator between individual answers
-C_PG     = (100, 100, 100)   # page counter
+C_BG     = (4,   4,   8)
+C_HDR_BG = (10,  16,  32)
+C_HDR_FG = (255, 255, 255)
+C_Q      = (225, 228, 238)   # question — near-white
+C_NUM    = (65,  75, 100)    # index number — muted blue-grey
+C_SEP    = (26,  30,  45)    # separator between items
+C_SEP_QA = (18,  22,  35)    # separator between question and answers
+C_SEP_AA = (14,  16,  26)    # separator between individual answers
+C_PG     = (48,  55,  75)    # page counter
 
 # Rotating palette for correct answers — each answer gets a distinct colour
 C_ANSWERS = [
-    (60,  230,  60),   # green
-    (80,  180, 255),   # blue
-    (255, 210,  50),   # yellow
-    (255, 100, 100),   # red
-    (180,  80, 255),   # purple
-    (50,  220, 200),   # cyan
-    (255, 150,  50),   # orange
+    (75,  220,  90),   # green
+    (90,  175, 255),   # blue
+    (250, 205,  55),   # yellow
+    (255, 110, 110),   # red
+    (185,  90, 255),   # purple
+    (55,  215, 195),   # cyan
+    (255, 155,  60),   # orange
 ]
 
 
@@ -34,9 +37,9 @@ class QAResultView:
 
     PAD    = 10
     NUM_W  = 18
-    LINE_Q = 18
-    LINE_A = 15
-    SEP_H  = 10
+    LINE_Q = 17
+    LINE_A = 14
+    SEP_H  = 8
     BOTTOM = 16   # reserved for page counter
 
     def __init__(self, data: list[dict]):
@@ -133,12 +136,26 @@ class QAResultView:
         img = Image.new("RGB", (W, H), C_BG)
         d   = ImageDraw.Draw(img)
 
+        # Header
+        d.rectangle((0, 0, W - 1, HDR_H - 1), fill=C_HDR_BG)
+        d.line((0, HDR_H - 1, W - 1, HDR_H - 1), fill=(28, 40, 70))
+        d.text((8, 6), "Results", font=self._fq, fill=C_HDR_FG)
+        if len(self._pages) > 1:
+            pg = f"{self.page + 1}/{len(self._pages)}"
+            try:
+                pw = int(self._fpg.getlength(pg))
+            except AttributeError:
+                pw = self._fpg.getbbox(pg)[2]
+            px = W - pw - 10
+            d.rectangle((px - 4, 6, px + pw + 4, HDR_H - 6), fill=(20, 28, 55))
+            d.text((px, 7), pg, font=self._fpg, fill=(85, 105, 165))
+
         if not self._items:
-            d.text((self.PAD, self.PAD), "No results", font=self._fq, fill=C_Q)
+            d.text((self.PAD, HDR_H + 10), "No results", font=self._fq, fill=C_Q)
             return img
 
         indices = self._pages[self.page]
-        y = self.PAD
+        y = HDR_H + 6
 
         for idx in indices:
             q, answers = self._items[idx]
@@ -181,9 +198,9 @@ class QAResultView:
                 d.rectangle((self.PAD, y, W - self.PAD, y + 1), fill=C_SEP)
                 y += self.SEP_H - 4
 
-        # page counter
+        # page counter (bottom) — only when multiple pages, as subtle hint
         if len(self._pages) > 1:
-            pg = f"{self.page + 1} / {len(self._pages)}"
+            pg = f"▲▼ page {self.page + 1}/{len(self._pages)}"
             try:
                 pw = self._fpg.getlength(pg)
             except AttributeError:

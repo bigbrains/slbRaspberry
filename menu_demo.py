@@ -25,6 +25,7 @@ from PIL import Image, ImageDraw
 from display.menu import _load_font, Menu
 from display.simple_questions import SimpleQuestions
 from display.ai_camera import AICamera as _AICamera, CameraError
+from display.ai_camera_2 import AICamera2 as _AICamera2
 from display.wifi_menu import NetworkMode, IPInfoMode
 from display.qa_result import QAResultView
 
@@ -397,6 +398,109 @@ class AICameraMode:
         return s.get("name") or s.get("title") or s.get("description") or f"#{s['id']}"
 
 
+# ── AI Camera mode 2 ─────────────────────────────────────────────────────────
+
+class AICameraMode2(AICameraMode):
+    def __init__(self):
+        self._cam = _AICamera2()
+
+    def _run_camera(self, driver, scenario: dict) -> bool:
+        """Capture → show preview → B to send, hold B to retake, long hold to go back."""
+        name = self._label(scenario)
+        self._cam.show_camera_ready(driver, name)
+
+        prev      = {p: GPIO.HIGH for p in _ALL_PINS}
+        last_t    = {p: 0.0       for p in _ALL_PINS}
+        b_down_at = [0.0]
+
+        while True:
+            event = _poll(prev, last_t, b_down_at)
+            if event == 'b_long':
+                return False
+            elif event == 'b_short':
+                # Step 1: capture and show preview
+                self._cam._show_message(driver, "Capturing…")
+                try:
+                    img, path = self._cam._capture()   # original full-res image
+                    # centre-crop to square (same as _fit but without downscale)
+                    w, h   = img.size
+                    side   = min(w, h)
+                    img    = img.crop(((w - side) // 2, (h - side) // 2,
+                                       (w + side) // 2, (h + side) // 2))
+                except CameraError as e:
+                    log.error("Capture: %s", e)
+                    self._cam.show_error_screen(driver, str(e), duration=3)
+                    self._cam.show_camera_ready(driver, name)
+                    continue
+
+                log.info("Preview: %s", path)
+
+                # Step 2: animate preview, wait for B
+                action = self._run_preview_wait(driver, img)
+                if action == 'send':
+                    self._cam._show_message(driver, "Submitting…")
+                    try:
+                        response = self._cam.submit_photo(_API_BASE, scenario["id"], path)
+                        log.info("API response: %s", response)
+                    except CameraError as e:
+                        log.error("Submit: %s", e)
+                        self._cam.show_error_screen(driver, str(e), duration=3)
+                        self._cam.show_camera_ready(driver, name)
+                        continue
+
+                    session_id = response.get("sessionId")
+                    log.info("Session started: id=%s", session_id)
+                    if session_id is not None:
+                        take_new = self._run_polling(driver, session_id)
+                        if not take_new:
+                            return False
+                elif action == 'retake':
+                    pass  # loop back to camera ready
+
+                self._cam.show_camera_ready(driver, name)
+            time.sleep(0.02)
+
+    def _run_preview_wait(self, driver, img) -> str:
+        """Animate image (300% zoom, top-left → bottom-right, 3 s loop).
+        Returns 'send' (B short) or 'retake' (B long)."""
+        from PIL import ImageDraw
+        W, H      = 240, 240
+        ZOOM      = 10.0
+        ANIM_S    = 3.0
+        src_size  = img.size[0]            # full-res square side (e.g. 2448)
+        crop_size = int(src_size / ZOOM)   # pixels to crop from original
+        max_off   = src_size - crop_size   # travel range in original pixels
+
+        prev_b    = GPIO.HIGH
+        b_down_at = 0.0
+        start     = time.monotonic()
+
+        while True:
+            now = time.monotonic()
+            t   = ((now - start) % ANIM_S) / ANIM_S   # 0.0 → 1.0, looping
+            off = int(t * max_off)
+
+            frame = img.crop((off, off, off + crop_size, off + crop_size))
+            frame = frame.resize((W, H), Image.BILINEAR)
+            d = ImageDraw.Draw(frame)
+            d.rectangle((0, H - 20, W - 1, H - 1), fill=(0, 0, 0))
+            d.text((6, H - 16), "B: send   hold B: retake",
+                   font=self._cam._font_s, fill=(200, 200, 200))
+            driver.blit(frame)
+
+            # Button check
+            state = GPIO.input(_PIN_B)
+            if prev_b == GPIO.HIGH and state == GPIO.LOW:
+                b_down_at = now
+            elif prev_b == GPIO.LOW and state == GPIO.HIGH:
+                held = now - b_down_at
+                prev_b = state
+                return 'send' if held < _LONG_PRESS else 'retake'
+            prev_b = state
+
+            time.sleep(0.04)   # ~25 fps
+
+
 # ── Button test mode ──────────────────────────────────────────────────────────
 
 class ButtonTestMode:
@@ -489,9 +593,10 @@ class ButtonTestMode:
 # ── Menu items ────────────────────────────────────────────────────────────────
 
 MENU_ITEMS: dict[str, type] = {
-    "Questions":   QuestionsMode,
-    "AI Camera":   AICameraMode,
-    "Button Test": ButtonTestMode,
-    "Network":     NetworkMode,
-    "IP Info":     IPInfoMode,
+    "Questions":    QuestionsMode,
+    "AI Camera":    AICameraMode,
+    "AI Camera 2":  AICameraMode2,
+    "Button Test":  ButtonTestMode,
+    "Network":      NetworkMode,
+    "IP Info":      IPInfoMode,
 }

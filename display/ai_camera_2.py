@@ -14,7 +14,7 @@ CAMERA_DEVICE = "/dev/video0"   # USB camera — change if needed
 PHOTO_DIR     = "/home/pi/slb/photos"
 
 
-class AICamera:
+class AICamera2:
     """
     Captures a photo from a USB camera and displays it on the ST7789 240×240 screen.
     Uses fswebcam for capture and PIL for resize/display.
