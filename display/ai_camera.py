@@ -97,6 +97,26 @@ class AICamera:
         except Exception as e:
             raise CameraError(f"poll: {e}")
 
+    def submit_manual(self, api_base: str, photo_path: str) -> dict:
+        """POST /api/manual with photos[] only (no scenarioId). Returns parsed JSON response."""
+        url = f"{api_base}/api/manual"
+        log.info("submit_manual: POST %s  file=%s", url, os.path.basename(photo_path))
+        try:
+            import requests
+            with open(photo_path, "rb") as f:
+                resp = requests.post(
+                    url,
+                    files={"photos[]": (os.path.basename(photo_path), f, "image/jpeg")},
+                    timeout=30,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                log.info("submit_manual: response %s", data)
+                return data
+        except Exception as e:
+            log.error("submit_manual failed: %s", e)
+            raise CameraError(f"submit_manual: {e}")
+
     def submit_photo(self, api_base: str, scenario_id: int, photo_path: str) -> dict:
         """POST /api/solve with scenarioId and photos[]. Returns parsed JSON response."""
         url = f"{api_base}/api/solve"
@@ -120,6 +140,154 @@ class AICamera:
             raise CameraError(f"submit_photo: {e}")
 
     # ── Scenario / camera screens ─────────────────────────────────────────────
+
+    def show_photo_fullscreen(self, driver: ST7789Driver, refs) -> None:
+        """Display the current reference photo edge-to-edge with a page number badge."""
+        photo = refs.current_img() if refs and refs.count > 0 else None
+        if photo:
+            img = photo.copy()
+            d   = ImageDraw.Draw(img)
+            label = refs.label          # e.g. "3/12"
+            try:
+                tw = int(self._font_s.getlength(label))
+            except AttributeError:
+                tw = self._font_s.getbbox(label)[2]
+            pad = 4
+            d.rectangle((0, 0, tw + pad * 2 + 1, 17), fill=(10, 10, 16))
+            d.text((pad, 3), label, font=self._font_s, fill=(180, 180, 200))
+            driver.blit(img)
+        else:
+            blank = Image.new("RGB", (self.W, self.H), self.C_BG)
+            d = ImageDraw.Draw(blank)
+            try:
+                tw = int(self._font.getlength("no photos"))
+            except AttributeError:
+                tw = self._font.getbbox("no photos")[2]
+            d.text(((self.W - tw) // 2, self.H // 2 - 8), "no photos",
+                   font=self._font, fill=(50, 52, 65))
+            driver.blit(blank)
+
+    def show_camera_ready_refs(self, driver: ST7789Driver, title: str, refs) -> None:
+        """Camera-ready screen with reference photo as background (if any).
+        refs — ManualRefPhotos instance (or any object with .count, .current_img(), .label).
+        """
+        ref_img = refs.current_img() if refs and refs.count > 0 else None
+
+        if ref_img:
+            # Use reference photo as full background
+            overlay = Image.new("RGBA", (self.W, self.H), (0, 0, 0, 0))
+            d_ov    = ImageDraw.Draw(overlay)
+            # Darken header and footer bars
+            d_ov.rectangle((0, 0, self.W - 1, self.HEADER_H - 1), fill=(0, 0, 0, 210))
+            d_ov.rectangle((0, self.H - 46, self.W - 1, self.H - 1), fill=(0, 0, 0, 215))
+            img = Image.alpha_composite(ref_img.convert("RGBA"), overlay).convert("RGB")
+        else:
+            img = Image.new("RGB", (self.W, self.H), self.C_BG)
+
+        d = ImageDraw.Draw(img)
+
+        # Header (only draw bg rectangle when no ref photo)
+        if not ref_img:
+            d.rectangle((0, 0, self.W - 1, self.HEADER_H - 1), fill=self.C_HDR_BG)
+        d.line((0, self.HEADER_H - 1, self.W - 1, self.HEADER_H - 1), fill=(45, 35, 75))
+        d.text((8, 7), title, font=self._font, fill=self.C_HDR_FG)
+
+        # "ready" pill
+        pill_x = self.W - 46
+        d.rectangle((pill_x, 8, self.W - 8, self.HEADER_H - 8), fill=(12, 36, 24))
+        d.text((pill_x + 3, 9), "ready", font=self._font_s, fill=(60, 180, 100))
+
+        # Counter badge (top-left, below header)
+        if refs and refs.count > 0:
+            label = refs.label
+            d.text((8, self.HEADER_H + 4), label, font=self._font_s, fill=(200, 200, 200))
+
+        # Footer hints
+        hint_y = self.H - 40
+        if not ref_img:
+            d.line((8, hint_y, self.W - 8, hint_y), fill=(22, 22, 32))
+        hint_y += 5
+        d.text((8, hint_y),      "B    — capture & submit",  font=self._font_s, fill=(150, 155, 165))
+        if refs and refs.count > 0:
+            d.text((8, hint_y + 12), "A    — browse refs",   font=self._font_s, fill=(100, 105, 115))
+            d.text((8, hint_y + 24), "hold B — back",        font=self._font_s, fill=(55, 58, 68))
+        else:
+            d.text((8, hint_y + 12), "hold B — back",        font=self._font_s, fill=(55, 58, 68))
+
+        driver.blit(img)
+
+    def show_camera_ready_split(self, driver: ST7789Driver, title: str, refs) -> None:
+        """Split view: top half = API uploads, bottom half = cropped uploads."""
+        W, H     = self.W, self.H
+        HDR_H    = 22
+        MID      = HDR_H + (H - HDR_H) // 2   # 131
+        LABEL_H  = 15
+        HINT_H   = 16
+
+        img = Image.new("RGB", (W, H), self.C_BG)
+        d   = ImageDraw.Draw(img)
+
+        # Header
+        d.rectangle((0, 0, W - 1, HDR_H - 1), fill=self.C_HDR_BG)
+        d.line((0, HDR_H - 1, W - 1, HDR_H - 1), fill=(45, 35, 75))
+        d.text((8, 6), title, font=self._font_s, fill=self.C_HDR_FG)
+        d.rectangle((W - 44, 5, W - 6, HDR_H - 5), fill=(12, 36, 24))
+        d.text((W - 41, 6), "ready", font=self._font_s, fill=(60, 180, 100))
+
+        # Top section: API photos
+        api_active = refs is not None and refs.current_source == "api"
+        api_border = (55, 190, 100) if api_active else (30, 30, 46)
+        api_photo  = refs.api_img() if refs else None
+        api_y0, api_y1 = HDR_H, MID - 1
+        api_th = api_y1 - api_y0 - LABEL_H
+
+        if api_photo:
+            y_off = max(0, (H - api_th) // 2)
+            strip = api_photo.crop((0, y_off, W, min(H, y_off + api_th)))
+            img.paste(strip, (0, api_y0))
+        else:
+            cx, cy = W // 2, api_y0 + (api_y1 - api_y0 - LABEL_H) // 2 - 6
+            d.text((cx - 26, cy), "no photos", font=self._font_s, fill=(40, 42, 55))
+
+        d.rectangle((0, api_y0, W - 1, api_y1), outline=api_border,
+                    width=2 if api_active else 1)
+        lbl_y = api_y1 - LABEL_H
+        d.rectangle((0, lbl_y, W - 1, api_y1), fill=(6, 8, 14))
+        api_lbl = refs.api_label if refs else "API —"
+        d.text((6, lbl_y + 2), api_lbl, font=self._font_s,
+               fill=(200, 220, 200) if api_active else (100, 110, 120))
+
+        # Divider
+        d.line((0, MID, W - 1, MID), fill=(40, 40, 60))
+
+        # Bottom section: Cropped photos
+        crop_active = refs is not None and refs.current_source == "cropped"
+        crop_border = (55, 190, 100) if crop_active else (30, 30, 46)
+        crop_photo  = refs.cropped_img() if refs else None
+        crop_y0, crop_y1 = MID + 1, H - HINT_H - 1
+        crop_th = crop_y1 - crop_y0 - LABEL_H
+
+        if crop_photo:
+            y_off = max(0, (H - crop_th) // 2)
+            strip = crop_photo.crop((0, y_off, W, min(H, y_off + crop_th)))
+            img.paste(strip, (0, crop_y0))
+        else:
+            cx, cy = W // 2, crop_y0 + (crop_y1 - crop_y0 - LABEL_H) // 2 - 6
+            d.text((cx - 26, cy), "no photos", font=self._font_s, fill=(40, 42, 55))
+
+        d.rectangle((0, crop_y0, W - 1, crop_y1), outline=crop_border,
+                    width=2 if crop_active else 1)
+        lbl2_y = crop_y1 - LABEL_H
+        d.rectangle((0, lbl2_y, W - 1, crop_y1), fill=(6, 8, 14))
+        crop_lbl = refs.cropped_label if refs else "CROP —"
+        d.text((6, lbl2_y + 2), crop_lbl, font=self._font_s,
+               fill=(200, 220, 200) if crop_active else (100, 110, 120))
+
+        # Footer hints
+        d.text((6, H - HINT_H + 2), "B: capture  A: browse  hold: back",
+               font=self._font_s, fill=(80, 85, 100))
+
+        driver.blit(img)
 
     def show_camera_ready(self, driver: ST7789Driver, scenario_name: str):
         """Show camera-ready screen with scenario name and button hints."""

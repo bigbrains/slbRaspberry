@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SLB Display Emulator</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0c0c18;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      font-family: 'Courier New', Courier, monospace;
+      gap: 20px;
+    }
+
+    .device {
+      background: #111122;
+      border-radius: 16px;
+      padding: 22px 20px 18px;
+      box-shadow: 0 12px 48px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.04);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .device-label {
+      font-size: 9px;
+      color: #333;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+
+    .screen-bezel {
+      border: 3px solid #1a1a2c;
+      border-radius: 3px;
+      box-shadow: 0 0 0 1px #08080f, inset 0 0 12px rgba(0,0,0,0.9);
+      line-height: 0;
+    }
+
+    canvas {
+      display: block;
+      width: 240px;
+      height: 240px;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 24px;
+    }
+
+    .btn-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .btn {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: #181828;
+      border: 1px solid #252540;
+      color: #666;
+      font-size: 11px;
+      font-family: inherit;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+      transition: background 0.08s, color 0.08s;
+    }
+
+    .btn:active, .btn.flash {
+      background: #2a2a50;
+      color: #ccc;
+      border-color: #4040a0;
+    }
+
+    .btn-label {
+      font-size: 9px;
+      color: #2a2a44;
+      letter-spacing: 1px;
+    }
+
+    .status {
+      font-size: 9px;
+      color: #2a2a44;
+      letter-spacing: 1px;
+      min-height: 12px;
+    }
+
+    .kbd-hint {
+      font-size: 9px;
+      color: #1e1e30;
+      letter-spacing: 1px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="device">
+    <div class="device-label">SLB · 240 × 240</div>
+
+    <div class="screen-bezel">
+      <canvas id="display" width="240" height="240"></canvas>
+    </div>
+
+    <div class="buttons">
+      <div class="btn-wrap">
+        <div class="btn" id="btnA">A</div>
+        <div class="btn-label">NEXT</div>
+      </div>
+      <div class="btn-wrap">
+        <div class="btn" id="btnB">B</div>
+        <div class="btn-label">CAPTURE</div>
+      </div>
+    </div>
+
+    <div class="status" id="status">initialising…</div>
+  </div>
+
+  <div class="kbd-hint">keyboard: A = next · R = refresh</div>
+
+  <script>
+    const API = 'http://clb.modera.dev/clb';
+    const W = 240, H = 240;
+
+    const canvas   = document.getElementById('display');
+    const ctx      = canvas.getContext('2d');
+    const statusEl = document.getElementById('status');
+
+    let photos   = [];
+    let idx      = 0;
+    let imgCache = {};
+
+    // ── Canvas helpers ────────────────────────────────────────────────────────
+
+    function clear(color = '#040408') {
+      ctx.fillStyle = color;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    function centeredText(str, y, color, px = 12) {
+      ctx.font      = `${px}px "Courier New", monospace`;
+      ctx.fillStyle = color;
+      ctx.fillText(str, (W - ctx.measureText(str).width) / 2, y);
+    }
+
+    // ── Screens ───────────────────────────────────────────────────────────────
+
+    function drawLoading() {
+      clear();
+      centeredText('loading…', H / 2 + 4, '#2e2e48');
+    }
+
+    function drawNoPhotos() {
+      clear();
+      centeredText('no photos', H / 2 + 4, '#2e2e48');
+    }
+
+    function drawPhoto(img) {
+      const iw = img.naturalWidth, ih = img.naturalHeight;
+      const side = Math.min(iw, ih);
+      ctx.drawImage(img,
+        (iw - side) / 2, (ih - side) / 2, side, side,
+        0, 0, W, H
+      );
+    }
+
+    // ── Image loading ─────────────────────────────────────────────────────────
+
+    function loadImage(id) {
+      if (imgCache[id]) return Promise.resolve(imgCache[id]);
+      return new Promise((resolve, reject) => {
+        const img  = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload  = () => { imgCache[id] = img; resolve(img); };
+        img.onerror = reject;
+        img.src = `${API}/api/photos/${id}`;
+      });
+    }
+
+    function drawPageNumber() {
+      const label = `${idx + 1}/${photos.length}`;
+      const px    = 10;
+      ctx.font = `${px}px "Courier New", monospace`;
+      const tw = ctx.measureText(label).width;
+      const pad = 4;
+      ctx.fillStyle = 'rgba(10,10,16,0.82)';
+      ctx.fillRect(0, 0, tw + pad * 2 + 2, 18);
+      ctx.fillStyle = '#b4b4c8';
+      ctx.fillText(label, pad, 12);
+    }
+
+    async function showCurrent() {
+      if (!photos.length) { drawNoPhotos(); setStatus('—'); return; }
+      const photo = photos[idx];
+      setStatus(`id: ${photo.id}`);
+      try {
+        const img = await loadImage(photo.id);
+        drawPhoto(img);
+        drawPageNumber();
+      } catch {
+        clear();
+        centeredText(`error loading #${photo.id}`, H / 2 + 4, '#883333', 10);
+      }
+    }
+
+    // ── Fetch list ────────────────────────────────────────────────────────────
+
+    async function fetchPhotos() {
+      drawLoading();
+      setStatus('fetching…');
+      try {
+        const resp = await fetch(`${API}/api/photos/list?source=crop&limit=20`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        photos = data.photos || [];
+        idx    = 0;
+        await showCurrent();
+      } catch (e) {
+        clear();
+        centeredText('fetch failed', H / 2 - 8,  '#883333', 12);
+        centeredText(String(e),      H / 2 + 10, '#552222', 10);
+        setStatus('check CORS / network');
+      }
+    }
+
+    // ── Button actions ────────────────────────────────────────────────────────
+
+    function pressA() {
+      if (!photos.length) return;
+      idx = (idx + 1) % photos.length;
+      showCurrent();
+    }
+
+    // ── UI helpers ────────────────────────────────────────────────────────────
+
+    function setStatus(msg) { statusEl.textContent = msg; }
+
+    function flash(el) {
+      el.classList.add('flash');
+      setTimeout(() => el.classList.remove('flash'), 120);
+    }
+
+    // ── Event wiring ──────────────────────────────────────────────────────────
+
+    document.getElementById('btnA').addEventListener('click', () => { flash(document.getElementById('btnA')); pressA(); });
+    document.getElementById('btnB').addEventListener('click', () => flash(document.getElementById('btnB')));
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'a' || e.key === 'A') { flash(document.getElementById('btnA')); pressA(); }
+      if (e.key === 'b' || e.key === 'B') { flash(document.getElementById('btnB')); }
+      if (e.key === 'r' || e.key === 'R') fetchPhotos();
+    });
+
+    // ── Boot ──────────────────────────────────────────────────────────────────
+    fetchPhotos();
+  </script>
+
+</body>
+</html>

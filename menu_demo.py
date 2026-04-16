@@ -28,11 +28,15 @@ from display.ai_camera import AICamera as _AICamera, CameraError
 from display.ai_camera_2 import AICamera2 as _AICamera2
 from display.wifi_menu import NetworkMode, IPInfoMode
 from display.qa_result import QAResultView
+from display.manual_ref import ManualRefPhotos
 
 log = logging.getLogger(__name__)
 
 # ── API ───────────────────────────────────────────────────────────────────────
 _API_BASE = "http://clb.modera.dev/clb"
+
+# ── Reference photos (shared across all camera modes) ─────────────────────────
+_refs = ManualRefPhotos()   # loads cached photos immediately; call sync() to update
 
 # ── Persistent state file ─────────────────────────────────────────────────────
 STATE_FILE = "/home/pi/slb/state.json"
@@ -268,23 +272,52 @@ class AICameraMode:
     def _run_camera(self, driver, scenario: dict) -> bool:
         """Camera ready loop. Returns False to go back to scenario menu."""
         name = self._label(scenario)
-        self._cam.show_camera_ready(driver, name)
 
-        prev      = {p: GPIO.HIGH for p in _ALL_PINS}
-        last_t    = {p: 0.0       for p in _ALL_PINS}
+        self._cam.show_camera_ready_refs(driver, name, _refs)
+        _refs.sync(_API_BASE)
+        self._cam.show_camera_ready_refs(driver, name, _refs)
+
+        prev      = {p: GPIO.HIGH for p in (_PIN_A, _PIN_B)}
+        last_a    = 0.0
         b_down_at = [0.0]
+        last_sync = time.monotonic()
 
         while True:
-            event = _poll(prev, last_t, b_down_at)
-            if event == 'b_long':
-                return False
-            elif event == 'b_short':
-                session_id = self._capture_and_submit(driver, scenario, name)
-                if session_id is not None:
-                    take_new = self._run_polling(driver, session_id)
-                    if not take_new:
-                        return False
-                self._cam.show_camera_ready(driver, name)
+            now = time.monotonic()
+
+            if now - last_sync >= 30.0:
+                last_sync = now
+                if _refs.sync(_API_BASE):
+                    self._cam.show_camera_ready_refs(driver, name, _refs)
+
+            for pin in (_PIN_A, _PIN_B):
+                state = GPIO.input(pin)
+                if pin == _PIN_B:
+                    if prev[pin] == GPIO.HIGH and state == GPIO.LOW:
+                        b_down_at[0] = now
+                    elif prev[pin] == GPIO.LOW and state == GPIO.HIGH:
+                        held = now - b_down_at[0]
+                        prev[pin] = state
+                        if held >= _LONG_PRESS:
+                            return False
+                        else:
+                            session_id = self._capture_and_submit(driver, scenario, name)
+                            if session_id is not None:
+                                take_new = self._run_polling(driver, session_id)
+                                if not take_new:
+                                    return False
+                            _refs.sync(_API_BASE)
+                            self._cam.show_camera_ready_refs(driver, name, _refs)
+                        break
+                elif pin == _PIN_A:
+                    if prev[pin] == GPIO.HIGH and state == GPIO.LOW:
+                        if now - last_a >= _DEBOUNCE:
+                            last_a = now
+                            if _refs.count > 0:
+                                _refs.next()
+                                self._cam.show_camera_ready_refs(driver, name, _refs)
+                prev[pin] = state
+
             time.sleep(0.02)
 
     # ── Capture + submit ───────────────────────────────────────────────────────
@@ -396,6 +429,93 @@ class AICameraMode:
     @staticmethod
     def _label(s: dict) -> str:
         return s.get("name") or s.get("title") or s.get("description") or f"#{s['id']}"
+
+
+# ── Manual Camera mode ───────────────────────────────────────────────────────
+
+class ManualCameraMode:
+    """
+    Direct camera capture → POST /api/manual → show response.
+
+    Camera ready:
+      ▲ / ▼   — browse reference photos
+      B short  — capture & submit
+      B long   — back to main menu
+    """
+
+    def __init__(self):
+        self._cam = _AICamera()
+
+    def run(self, driver):
+        _wait_release(_PIN_B)
+
+        # Show screen immediately, then fetch photos
+        self._show_ready(driver)
+        _refs.sync(_API_BASE)
+        _refs._idx = 0
+        self._show_ready(driver)
+
+        prev      = {p: GPIO.HIGH for p in (_PIN_A, _PIN_B)}
+        last_a    = 0.0
+        b_down_at = [0.0]
+        last_sync = time.monotonic()
+
+        while True:
+            now = time.monotonic()
+
+            if now - last_sync >= 30.0:
+                last_sync = now
+                if _refs.sync(_API_BASE):
+                    self._show_ready(driver)
+
+            for pin in (_PIN_A, _PIN_B):
+                state = GPIO.input(pin)
+
+                if pin == _PIN_B:
+                    if prev[pin] == GPIO.HIGH and state == GPIO.LOW:
+                        b_down_at[0] = now
+                    elif prev[pin] == GPIO.LOW and state == GPIO.HIGH:
+                        held = now - b_down_at[0]
+                        prev[pin] = state
+                        if held >= _LONG_PRESS:
+                            return
+                        else:
+                            self._capture_and_show(driver)
+                            _refs.sync(_API_BASE)
+                            self._show_ready(driver)
+                        break
+                elif pin == _PIN_A:
+                    if prev[pin] == GPIO.HIGH and state == GPIO.LOW:
+                        if now - last_a >= _DEBOUNCE:
+                            last_a = now
+                            if _refs.count > 0:
+                                _refs.next()
+                                self._show_ready(driver)
+
+                prev[pin] = state
+
+            time.sleep(0.02)
+
+    def _capture_and_show(self, driver):
+        self._cam._show_message(driver, "Capturing…")
+        try:
+            img, path = self._cam.capture()
+            driver.blit(img)            # show photo immediately
+            log.info("Manual photo saved: %s", path)
+        except CameraError as e:
+            log.error("Manual capture: %s", e)
+            self._cam.show_error_screen(driver, str(e), duration=3)
+            return
+
+        try:
+            response = self._cam.submit_manual(_API_BASE, path)
+            log.info("Manual API response: %s", response)
+        except CameraError as e:
+            log.error("Manual submit: %s", e)
+            self._cam.show_error_screen(driver, str(e), duration=3)
+
+    def _show_ready(self, driver):
+        self._cam.show_photo_fullscreen(driver, _refs)
 
 
 # ── AI Camera mode 2 ─────────────────────────────────────────────────────────
@@ -593,10 +713,11 @@ class ButtonTestMode:
 # ── Menu items ────────────────────────────────────────────────────────────────
 
 MENU_ITEMS: dict[str, type] = {
-    "Questions":    QuestionsMode,
-    "AI Camera":    AICameraMode,
-    "AI Camera 2":  AICameraMode2,
-    "Button Test":  ButtonTestMode,
-    "Network":      NetworkMode,
-    "IP Info":      IPInfoMode,
+    "Questions":      QuestionsMode,
+    "AI Camera":      AICameraMode,
+    "AI Camera 2":    AICameraMode2,
+    "Manual Camera":  ManualCameraMode,
+    "Button Test":    ButtonTestMode,
+    "Network":        NetworkMode,
+    "IP Info":        IPInfoMode,
 }
